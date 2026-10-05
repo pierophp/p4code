@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import {
   ProjectId,
+  ThreadId,
   EnvironmentAuthenticatedAuth,
   EnvironmentScopeRequiredError,
 } from "@t3tools/contracts";
@@ -42,6 +43,7 @@ export const ItemThread = Schema.Struct({
   available: Schema.Boolean,
 });
 export type ItemThread = typeof ItemThread.Type;
+export const LinkItemThreadPayload = Schema.Struct({ threadId: ThreadId });
 export const Item = Schema.Struct({
   ...ItemSummary.fields,
   body: Schema.String,
@@ -111,8 +113,8 @@ class Items extends HttpApiGroup.make("items")
       {
         params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
         headers,
-        payload: Schema.Struct({ threadId: Schema.String }),
-        success: Schema.Struct({ threadId: Schema.String }),
+        payload: LinkItemThreadPayload,
+        success: Schema.Struct({ threadId: ThreadId }),
         error: errors,
       },
     ).middleware(EnvironmentAuthenticatedAuth),
@@ -122,7 +124,7 @@ class Items extends HttpApiGroup.make("items")
       "unlinkThread",
       "/api/p4code/projects/:projectId/items/:itemId/threads/:threadId",
       {
-        params: Schema.Struct({ ...params.fields, itemId: Schema.String, threadId: Schema.String }),
+        params: Schema.Struct({ ...params.fields, itemId: Schema.String, threadId: ThreadId }),
         headers,
         success: Schema.Void,
         error: errors,

@@ -127,9 +127,12 @@ const linkThreadRequest = (project: string, id: string, threadId: string) =>
     body: JSON.stringify({ threadId }),
   });
 const unlinkThreadRequest = (project: string, id: string, threadId: string) =>
-  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/threads/${threadId}`, {
-    method: "DELETE",
-  });
+  new Request(
+    `http://t3.test/api/p4code/projects/${project}/items/${id}/threads/${encodeURIComponent(threadId)}`,
+    {
+      method: "DELETE",
+    },
+  );
 it("creates an issue snapshot and lists only its Project, including after reopening SQLite", async () => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "p4code-items-"));
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));
@@ -321,6 +324,10 @@ it("links only a live Thread in the same Project and unlinks its reference witho
   const app = await fixture(filename, { threadReader });
   const created = await app.handler(request("project-a", issue.url));
   const item = await created.json();
+
+  expect((await app.handler(linkThreadRequest("project-a", item.id, " \t "))).status).toBe(400);
+  expect((await app.handler(unlinkThreadRequest("project-a", item.id, " \t "))).status).toBe(400);
+  expect(lookups).toEqual([]);
 
   const rejected = await app.handler(
     linkThreadRequest("project-a", item.id, "other-project-thread"),

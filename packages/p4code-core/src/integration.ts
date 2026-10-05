@@ -7,7 +7,6 @@ import {
   DEFAULT_MODEL,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   ProviderInstanceId,
-  ThreadId,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -78,7 +77,7 @@ const itemThreadReader = Layer.effect(
     const threads = yield* ThreadManagement.ThreadManagementService;
     return {
       isAvailable: ({ projectId, threadId }) =>
-        threads.getProjectThread({ projectId, threadId: ThreadId.make(threadId) }).pipe(
+        threads.getProjectThread({ projectId, threadId }).pipe(
           Effect.as(true),
           Effect.catchTag("ThreadManagementThreadNotFoundError", () => Effect.succeed(false)),
           Effect.mapError(() => new ItemUnavailableError({ message: "Could not read a Thread." })),

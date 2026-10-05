@@ -16,7 +16,7 @@ import {
   ItemRequestError,
   ItemUnavailableError,
 } from "@p4code/contracts/items";
-import type { ProjectId } from "@t3tools/contracts";
+import { ThreadId, type ProjectId } from "@t3tools/contracts";
 import * as GitHubIssue from "./GitHubIssue.ts";
 
 export class Projects extends Context.Service<
@@ -39,7 +39,7 @@ export class ItemThreadReader extends Context.Service<
   {
     readonly isAvailable: (input: {
       readonly projectId: ProjectId;
-      readonly threadId: string;
+      readonly threadId: ThreadId;
     }) => Effect.Effect<boolean, ItemUnavailableError>;
   }
 >()("@p4code/core/ItemService/ItemThreadReader") {}
@@ -85,6 +85,7 @@ const decodeComments = Schema.decodeUnknownEffect(
 );
 const encodeComments = Schema.encodeSync(Schema.fromJsonString(Schema.Array(IssueComment)));
 const decodeUrl = Schema.decodeUnknownEffect(IssueUrl);
+const decodeThreadId = Schema.decodeUnknownEffect(ThreadId);
 const isRequestError = Schema.is(ItemRequestError);
 const isUnavailableError = Schema.is(ItemUnavailableError);
 
@@ -132,9 +133,14 @@ const make = Effect.gen(function* () {
         threadId: string;
       }>`SELECT thread_id AS "threadId" FROM item_threads WHERE item_id = ${itemId} ORDER BY id`;
       return yield* Effect.forEach(rows, ({ threadId }) =>
-        threadReader
-          .isAvailable({ projectId, threadId })
-          .pipe(Effect.map((available) => ({ threadId, available }))),
+        decodeThreadId(threadId).pipe(
+          Effect.mapError(() => new ItemUnavailableError({ message: "Could not read a Thread." })),
+          Effect.flatMap((validThreadId) =>
+            threadReader
+              .isAvailable({ projectId, threadId: validThreadId })
+              .pipe(Effect.map((available) => ({ threadId, available }))),
+          ),
+        ),
       );
     });
   const list = Effect.fn("ItemService.list")(
@@ -243,17 +249,22 @@ const make = Effect.gen(function* () {
   );
   const linkThread = Effect.fn("ItemService.linkThread")(
     function* (projectId: ProjectId, itemId: string, threadId: string) {
+      const validThreadId = yield* decodeThreadId(threadId).pipe(
+        Effect.mapError(
+          () => new ItemRequestError({ message: "Thread ID must be a non-empty string." }),
+        ),
+      );
       yield* requireProject(projectId);
       const rows =
         yield* sql`SELECT id FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
       if (!rows[0]) return yield* new ItemRequestError({ message: "Item not found." });
-      if (!(yield* threadReader.isAvailable({ projectId, threadId })))
+      if (!(yield* threadReader.isAvailable({ projectId, threadId: validThreadId })))
         return yield* new ItemRequestError({ message: "Thread not found in this Project." });
       const existing =
-        yield* sql`SELECT item_id FROM item_threads WHERE thread_id = ${threadId} AND item_id <> ${itemId} LIMIT 1`;
+        yield* sql`SELECT item_id FROM item_threads WHERE thread_id = ${validThreadId} AND item_id <> ${itemId} LIMIT 1`;
       if (existing[0])
         return yield* new ItemRequestError({ message: "Thread is already linked to an Item." });
-      yield* sql`INSERT INTO item_threads (item_id, thread_id) VALUES (${itemId}, ${threadId}) ON CONFLICT(item_id, thread_id) DO NOTHING`;
+      yield* sql`INSERT INTO item_threads (item_id, thread_id) VALUES (${itemId}, ${validThreadId}) ON CONFLICT(item_id, thread_id) DO NOTHING`;
     },
     Effect.mapError((cause) =>
       isRequestError(cause) || isUnavailableError(cause)
@@ -263,11 +274,16 @@ const make = Effect.gen(function* () {
   );
   const unlinkThread = Effect.fn("ItemService.unlinkThread")(
     function* (projectId: ProjectId, itemId: string, threadId: string) {
+      const validThreadId = yield* decodeThreadId(threadId).pipe(
+        Effect.mapError(
+          () => new ItemRequestError({ message: "Thread ID must be a non-empty string." }),
+        ),
+      );
       yield* requireProject(projectId);
       const rows =
         yield* sql`SELECT id FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
       if (!rows[0]) return yield* new ItemRequestError({ message: "Item not found." });
-      yield* sql`DELETE FROM item_threads WHERE item_id = ${itemId} AND thread_id = ${threadId}`;
+      yield* sql`DELETE FROM item_threads WHERE item_id = ${itemId} AND thread_id = ${validThreadId}`;
     },
     Effect.mapError((cause) =>
       isRequestError(cause) || isUnavailableError(cause)
