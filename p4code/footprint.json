@@ -4,6 +4,7 @@
   "apps/web/src/routeTree.gen.ts": "Generated route registry for the p4code Items route",
   "apps/web/src/components/sidebar/SidebarChrome.tsx": "Future Items sidebar entry",
   "apps/web/src/components/CommandPalette.tsx": "Items command palette entry",
+  "apps/server/src/mcp/McpHttpServer.ts": "Register the p4code Items MCP toolkit",
   "scripts/build-desktop-artifact.ts": "Desktop product name and bundle identifier override from fork-owned declaration data; one marked block",
   "pnpm-lock.yaml": "Generated workspace dependency metadata for p4code packages; counted separately from source integration blocks"
 }

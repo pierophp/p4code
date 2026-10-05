@@ -78,10 +78,11 @@ contain only one contiguous p4code block, delimited by `p4code:begin` and
 lock and future route composition share `apps/server/src/server.ts`; later work
 must keep them in a single block rather than scatter imports and wiring.
 
-The three declared source integration files are the server entry point, sidebar
-chrome, and desktop build script. Generated workspace dependency metadata in
-`pnpm-lock.yaml` is also declared and checked, but counted separately from those
-source integration blocks; the lockfile does not use block markers.
+The five declared source integration files are the server entry point, sidebar
+chrome, command palette, MCP registration, and desktop build script. The web
+workspace manifest, generated route registry, and generated workspace dependency
+metadata in `pnpm-lock.yaml` are also declared and checked separately from source
+integration blocks; these files do not use block markers.
 
 Run the `p4code:footprint` command from the repository root:
 
