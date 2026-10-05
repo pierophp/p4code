@@ -1,8 +1,10 @@
-import { ArrowLeftIcon, ChartNoAxesColumnIcon, SettingsIcon } from "lucide-react";
+// p4code:begin items-sidebar
+import { ArrowLeftIcon, ChartNoAxesColumnIcon, ListTodoIcon, SettingsIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { memo, useCallback } from "react";
-import { Link, useLocation, useNavigate } from "@tanstack/react-router";
+import { Link, useLocation, useNavigate, useParams } from "@tanstack/react-router";
 
+import { useHandleNewThread } from "../../hooks/useHandleNewThread";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
@@ -130,9 +132,27 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
   const navigate = useNavigate();
   const navigateToMainApp = useNavigateToMainApp();
   const { isMobile, setOpenMobile } = useSidebar();
-  const isOnUtilityPage = useLocation({
-    select: (location) => isSidebarUtilityPage(location.pathname),
+  const pathname = useLocation({ select: (location) => location.pathname });
+  const isOnUtilityPage = isSidebarUtilityPage(pathname);
+  const itemsRouteParams = useParams({
+    from: "/items/$environmentId/$projectId",
+    shouldThrow: false,
   });
+  const { activeDraftThread, activeThread } = useHandleNewThread();
+  const contextualThread = activeThread ?? activeDraftThread;
+  const itemsTarget =
+    itemsRouteParams?.environmentId && itemsRouteParams.projectId
+      ? {
+          environmentId: itemsRouteParams.environmentId,
+          projectId: itemsRouteParams.projectId,
+        }
+      : contextualThread?.projectId
+        ? {
+            environmentId: contextualThread.environmentId,
+            projectId: contextualThread.projectId,
+          }
+        : null;
+  const isOnItemsPage = pathname.startsWith("/items/");
   const pullRequestsSupported = usePullRequestsSupported();
   const closeMobileSidebar = useCallback(() => {
     if (isMobile) {
@@ -157,6 +177,16 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
     }
     void navigate({ to: "/usage" });
   }, [isMobile, navigate, setOpenMobile]);
+
+  const handleItemsClick = useCallback(() => {
+    closeMobileSidebar();
+    if (itemsTarget) {
+      void navigate({
+        to: "/items/$environmentId/$projectId",
+        params: itemsTarget,
+      });
+    }
+  }, [closeMobileSidebar, itemsTarget, navigate]);
 
   const handleBackClick = useCallback(() => {
     closeMobileSidebar();
@@ -191,6 +221,25 @@ export const SidebarUtilityMenu = memo(function SidebarUtilityMenu() {
             label="Usage"
             onClick={handleUsageClick}
           />
+          {itemsTarget ? (
+            <SidebarMenuItem className="shrink-0">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <SidebarMenuButton
+                      aria-label="Items"
+                      isActive={isOnItemsPage}
+                      onClick={handleItemsClick}
+                      size="icon"
+                    >
+                      <ListTodoIcon />
+                    </SidebarMenuButton>
+                  }
+                />
+                <TooltipPopup side="top">Items</TooltipPopup>
+              </Tooltip>
+            </SidebarMenuItem>
+          ) : null}
         </>
       )}
       <SidebarUpdatePill />
@@ -208,3 +257,4 @@ export const SidebarChromeFooter = memo(function SidebarChromeFooter() {
     </SidebarFooter>
   );
 });
+// p4code:end items-sidebar

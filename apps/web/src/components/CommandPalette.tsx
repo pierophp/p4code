@@ -2264,6 +2264,25 @@ function OpenCommandPaletteDialog(props: {
     projectGroups[0] ??
     null;
   if (contextualProjectGroup) {
+    // p4code:begin items-command
+    actionItems.push({
+      kind: "action",
+      value: "action:project-items",
+      searchTerms: ["items", "issues", "planning", "github issues"],
+      title: "Open project Items",
+      description: contextualProjectGroup.displayName,
+      icon: <FolderIcon className={ITEM_ICON_CLASS} />,
+      run: async () => {
+        await navigate({
+          to: "/items/$environmentId/$projectId",
+          params: {
+            environmentId: contextualProjectGroup.environmentId,
+            projectId: contextualProjectGroup.id,
+          },
+        });
+      },
+    });
+    // p4code:end items-command
     actionItems.push({
       kind: "action",
       value: "action:project-settings",
