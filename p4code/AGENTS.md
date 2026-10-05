@@ -10,14 +10,17 @@ data; it is not a workspace package.
 
 [footprint.json](footprint.json) is the authoritative list of allowed
 upstream-owned paths and the reason for each. Read it before editing an upstream
-file. It covers server startup and future route composition, sidebar chrome,
-and the desktop build override. Change that list only when the requested work
-explicitly authorizes a new integration seam. Keep T3 Code's database schema,
-migration sequence, WebSocket RPC contracts, and desktop package manifest intact.
+file. Its three source integration files cover server startup and future route
+composition, sidebar chrome, and the desktop build override. Generated workspace
+dependency metadata in `pnpm-lock.yaml` is declared and checked separately from
+source integration blocks, without block markers. Change that list only when the
+requested work explicitly authorizes a new integration seam or generated metadata
+path. Keep T3 Code's database schema, migration sequence, WebSocket RPC contracts,
+and desktop package manifest intact.
 
-Inside each declared upstream file, keep all p4code integration in **one
-contiguous block**, including any imports or wiring. Use comments appropriate to
-the surrounding language with matching delimiters:
+Inside each declared upstream source integration file, keep all p4code integration
+in **one contiguous block**, including any imports or wiring. Use comments
+appropriate to the surrounding language with matching delimiters:
 
 ```ts
 // p4code:begin <purpose>

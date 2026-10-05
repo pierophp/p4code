@@ -69,12 +69,17 @@ The lock is a safety prerequisite for sharing the home, not an optional feature.
 
 ## Keeping upstream merges affordable
 
-All p4code logic lives in new files. Each upstream-owned integration file may
+All p4code logic lives in new files. Each upstream-owned source integration file may
 contain only one contiguous p4code block, delimited by `p4code:begin` and
 `p4code:end` comments. Follow [AGENTS.md](AGENTS.md) for the convention and
 [footprint.json](footprint.json) for the authoritative allowed paths. The startup
 lock and future route composition share `apps/server/src/server.ts`; later work
 must keep them in a single block rather than scatter imports and wiring.
+
+The three declared source integration files are the server entry point, sidebar
+chrome, and desktop build script. Generated workspace dependency metadata in
+`pnpm-lock.yaml` is also declared and checked, but counted separately from those
+source integration blocks; the lockfile does not use block markers.
 
 Run the `p4code:footprint` command from the repository root:
 
