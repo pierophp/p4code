@@ -71,6 +71,10 @@ export class ItemService extends Context.Service<
       itemId: string,
       threadId: string,
     ) => Effect.Effect<void, ItemRequestError | ItemUnavailableError>;
+    readonly delete: (
+      projectId: ProjectId,
+      itemId: string,
+    ) => Effect.Effect<void, ItemRequestError | ItemUnavailableError>;
     readonly create: (
       projectId: ProjectId,
       url: string,
@@ -291,6 +295,25 @@ const make = Effect.gen(function* () {
         : new ItemUnavailableError({ message: "Could not unlink the Thread from this Item." }),
     ),
   );
+  const deleteItem = Effect.fn("ItemService.delete")(
+    function* (projectId: ProjectId, itemId: string) {
+      yield* requireProject(projectId);
+      const rows =
+        yield* sql`SELECT id FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
+      if (!rows[0]) return yield* new ItemRequestError({ message: "Item not found." });
+      yield* sql.withTransaction(
+        Effect.gen(function* () {
+          yield* sql`DELETE FROM item_threads WHERE item_id = ${itemId}`;
+          yield* sql`DELETE FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
+        }),
+      );
+    },
+    Effect.mapError((cause) =>
+      isRequestError(cause) || isUnavailableError(cause)
+        ? cause
+        : new ItemUnavailableError({ message: "Could not delete the Item." }),
+    ),
+  );
   return ItemService.of({
     list,
     get: refresh,
@@ -299,6 +322,7 @@ const make = Effect.gen(function* () {
     startThread,
     linkThread,
     unlinkThread,
+    delete: deleteItem,
   });
 });
 

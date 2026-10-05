@@ -57,6 +57,13 @@ const handlers = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "delete",
+        Effect.fn(function* ({ params }) {
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          yield* items.delete(params.projectId, params.itemId);
+        }),
+      )
+      .handle(
         "create",
         Effect.fn(function* ({ params, payload }) {
           yield* requireEnvironmentScope(AuthOrchestrationOperateScope);

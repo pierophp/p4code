@@ -133,6 +133,35 @@ const unlinkThreadRequest = (project: string, id: string, threadId: string) =>
       method: "DELETE",
     },
   );
+const deleteItemRequest = (project: string, id: string) =>
+  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}`, { method: "DELETE" });
+
+it("deletes an Item and its links while keeping the associated T3 Thread available", async () => {
+  const existingThreads = new Set(["thread-kept"]);
+  const app = await fixture(await temporaryDatabase(), {
+    threadReader: {
+      isAvailable: ({ threadId }) => Effect.succeed(existingThreads.has(threadId)),
+    },
+  });
+  const created = await app.handler(request("project-a", issue.url));
+  const item = await created.json();
+  expect((await app.handler(linkThreadRequest("project-a", item.id, "thread-kept"))).status).toBe(
+    200,
+  );
+
+  const deleted = await app.handler(deleteItemRequest("project-a", item.id));
+  expect(deleted.status).toBe(200);
+  expect(await (await app.handler(request("project-a"))).json()).toEqual([]);
+  expect(existingThreads.has("thread-kept")).toBe(true);
+
+  const replacement = await (await app.handler(request("project-a", issue.url))).json();
+  expect(
+    (await app.handler(linkThreadRequest("project-a", replacement.id, "thread-kept"))).status,
+  ).toBe(200);
+  expect(
+    (await (await app.handler(detailRequest("project-a", replacement.id))).json()).threads,
+  ).toEqual([{ threadId: "thread-kept", available: true }]);
+});
 it("creates an issue snapshot and lists only its Project, including after reopening SQLite", async () => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "p4code-items-"));
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));

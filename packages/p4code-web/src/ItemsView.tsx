@@ -7,6 +7,7 @@ import type { Item, ItemSummary } from "@p4code/contracts/items";
 export function ItemsView({
   list,
   create,
+  deleteItem,
   get,
   refresh,
   startThread,
@@ -16,6 +17,7 @@ export function ItemsView({
 }: {
   list: () => Promise<ReadonlyArray<ItemSummary>>;
   create: (url: string) => Promise<void>;
+  deleteItem: (item: ItemSummary) => Promise<void>;
   get: (item: ItemSummary) => Promise<Item>;
   refresh: (item: ItemSummary) => Promise<Item>;
   startThread: (item: ItemSummary) => Promise<string>;
@@ -31,6 +33,7 @@ export function ItemsView({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [deletingItem, setDeletingItem] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [startingThread, setStartingThread] = useState<string | null>(null);
   const [linkingThread, setLinkingThread] = useState<string | null>(null);
@@ -130,14 +133,43 @@ export function ItemsView({
         <ul className="flex flex-col gap-3">
           {items.map((item) => (
             <li key={item.id} className="rounded border p-4">
-              <button
-                className="font-medium underline"
-                type="button"
-                aria-expanded={selected === item.id}
-                onClick={() => setSelected(selected === item.id ? null : item.id)}
-              >
-                {item.title}
-              </button>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  className="font-medium underline"
+                  type="button"
+                  aria-expanded={selected === item.id}
+                  onClick={() => setSelected(selected === item.id ? null : item.id)}
+                >
+                  {item.title}
+                </button>
+                <button
+                  className="text-sm text-muted-foreground underline disabled:opacity-50"
+                  type="button"
+                  disabled={deletingItem === item.id}
+                  onClick={async () => {
+                    if (
+                      !window.confirm(
+                        `Delete “${item.title}”? This permanently discards the Item snapshot and its Thread association history. The T3 Threads themselves will remain unchanged.`,
+                      )
+                    )
+                      return;
+                    setDeletingItem(item.id);
+                    setError(null);
+                    try {
+                      await deleteItem(item);
+                      setItems((current) => current.filter(({ id }) => id !== item.id));
+                      setSelected((current) => (current === item.id ? null : current));
+                      setDetail((current) => (current?.itemId === item.id ? null : current));
+                    } catch (error) {
+                      setError(error instanceof Error ? error.message : String(error));
+                    } finally {
+                      setDeletingItem(null);
+                    }
+                  }}
+                >
+                  {deletingItem === item.id ? "Deleting…" : "Delete Item"}
+                </button>
+              </div>
               <p>
                 {item.state.toLowerCase()} · {item.author}
               </p>

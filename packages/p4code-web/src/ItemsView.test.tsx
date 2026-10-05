@@ -48,6 +48,7 @@ it("shows associated Threads and opens an existing or newly started Thread", asy
       <ItemsView
         list={async () => [summary]}
         create={async () => undefined}
+        deleteItem={async () => undefined}
         get={async () => detail}
         refresh={async () => detail}
         startThread={startThread}
@@ -99,6 +100,7 @@ it("links a Thread from the Item and unlinks it without losing the Item", async 
       <ItemsView
         list={async () => [summary]}
         create={async () => undefined}
+        deleteItem={async () => undefined}
         get={get}
         refresh={async () => detail}
         startThread={async () => "thread-new"}
@@ -142,4 +144,38 @@ it("links a Thread from the Item and unlinks it without losing the Item", async 
   expect(unlinkThread).toHaveBeenCalledWith(summary, "thread-to-link");
   expect(container.textContent).toContain("No Threads yet.");
   expect(container.textContent).toContain(summary.title);
+});
+
+it("asks before deleting an Item and removes it from the Project list after confirmation", async () => {
+  const confirm = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
+  vi.stubGlobal("confirm", confirm);
+  const deleteItem = vi.fn(async () => undefined);
+  await act(async () => {
+    root.render(
+      <ItemsView
+        list={async () => [summary]}
+        create={async () => undefined}
+        deleteItem={deleteItem}
+        get={async () => detail}
+        refresh={async () => detail}
+        startThread={async () => "thread-new"}
+        linkThread={async () => undefined}
+        unlinkThread={async () => undefined}
+        openThread={() => undefined}
+      />,
+    );
+  });
+  const remove = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Delete Item",
+  );
+  expect(remove).toBeDefined();
+  await act(async () => remove?.click());
+  expect(deleteItem).not.toHaveBeenCalled();
+  expect(container.textContent).toContain(summary.title);
+
+  await act(async () => remove?.click());
+  expect(confirm).toHaveBeenCalledTimes(2);
+  expect(confirm.mock.calls[1]?.[0]).toContain("The T3 Threads themselves will remain unchanged");
+  expect(deleteItem).toHaveBeenCalledWith(summary);
+  expect(container.textContent).toContain("No Items in this Project yet.");
 });

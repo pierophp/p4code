@@ -5,6 +5,7 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import { ItemsView } from "@p4code/web/ItemsView";
 import {
   createItemDetailAtom,
+  createItemDeleteAtom,
   createItemLinkThreadAtom,
   createItemRefreshAtom,
   createItemThreadAtom,
@@ -17,6 +18,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 
 const items = createItemsAtoms(connectionAtomRuntime);
 const itemDetail = createItemDetailAtom(connectionAtomRuntime);
+const itemDelete = createItemDeleteAtom(connectionAtomRuntime);
 const itemRefresh = createItemRefreshAtom(connectionAtomRuntime);
 const itemThread = createItemThreadAtom(connectionAtomRuntime);
 const itemLinkThread = createItemLinkThreadAtom(connectionAtomRuntime);
@@ -36,6 +38,7 @@ function ItemsPage() {
   const { environmentId, projectId } = Route.useParams();
   const run = useAtomCommand(items, { reportFailure: false });
   const runDetail = useAtomCommand(itemDetail, { reportFailure: false });
+  const runDelete = useAtomCommand(itemDelete, { reportFailure: false });
   const runRefresh = useAtomCommand(itemRefresh, { reportFailure: false });
   const runStartThread = useAtomCommand(itemThread, { reportFailure: false });
   const runLinkThread = useAtomCommand(itemLinkThread, { reportFailure: false });
@@ -69,6 +72,16 @@ function ItemsPage() {
       return result.value;
     },
     [runDetail, environmentId, projectId],
+  );
+  const deleteItem = useCallback(
+    async (item: ItemSummary) => {
+      const result = await runDelete({
+        environmentId: EnvironmentId.make(environmentId),
+        input: { projectId: ProjectId.make(projectId), itemId: item.id },
+      });
+      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+    },
+    [runDelete, environmentId, projectId],
   );
   const refresh = useCallback(
     async (item: ItemSummary) => {
@@ -126,6 +139,7 @@ function ItemsPage() {
       key={`${environmentId}:${projectId}`}
       list={list}
       create={create}
+      deleteItem={deleteItem}
       get={get}
       refresh={refresh}
       startThread={startThread}

@@ -7,7 +7,7 @@ import { ManagedRelay } from "@t3tools/client-runtime/relay";
 import * as RemoteAuthorization from "../../client-runtime/src/authorization/service.ts";
 import type { Atom } from "effect/unstable/reactivity";
 import type { HttpClient } from "effect/unstable/http";
-import type { ProjectId } from "@t3tools/contracts";
+import { ThreadId, type ProjectId } from "@t3tools/contracts";
 import type { Item } from "@p4code/contracts/items";
 import { ItemUnavailableError } from "@p4code/contracts/items";
 import { executeItemsHttpRequest } from "./http.ts";
@@ -188,7 +188,7 @@ export function createItemLinkThreadAtom<R, E>(
       request: ({ client, headers }) =>
         client.linkThread({
           params: { projectId: input.projectId, itemId: input.itemId },
-          payload: { threadId: input.threadId },
+          payload: { threadId: ThreadId.make(input.threadId) },
           headers,
         }),
     });
@@ -227,7 +227,11 @@ export function createItemUnlinkThreadAtom<R, E>(
       timeoutMs: 35_000,
       request: ({ client, headers }) =>
         client.unlinkThread({
-          params: { projectId: input.projectId, itemId: input.itemId, threadId: input.threadId },
+          params: {
+            projectId: input.projectId,
+            itemId: input.itemId,
+            threadId: ThreadId.make(input.threadId),
+          },
           headers,
         }),
     });
@@ -236,4 +240,36 @@ export function createItemUnlinkThreadAtom<R, E>(
     label: "p4code:item-unlink-thread",
     execute: request,
   });
+}
+
+export function createItemDeleteAtom<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | HttpClient.HttpClient | R, E>,
+) {
+  const request = Effect.fn(function* (input: { projectId: ProjectId; itemId: string }) {
+    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+    if (Option.isNone(prepared))
+      return yield* new ItemUnavailableError({
+        message: "Reconnect to this environment to use Items.",
+      });
+    const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
+    const remoteAuthorization = yield* Effect.serviceOption(
+      RemoteAuthorization.RemoteEnvironmentAuthorization,
+    );
+    return yield* executeItemsHttpRequest({
+      prepared: prepared.value,
+      signer,
+      remoteAuthorization,
+      method: "DELETE",
+      url: (baseUrl) =>
+        new URL(
+          `/api/p4code/projects/${encodeURIComponent(input.projectId)}/items/${encodeURIComponent(input.itemId)}`,
+          baseUrl,
+        ).toString(),
+      timeoutMs: 35_000,
+      request: ({ client, headers }) =>
+        client.delete({ params: { projectId: input.projectId, itemId: input.itemId }, headers }),
+    });
+  });
+  return createEnvironmentCommand(runtime, { label: "p4code:item-delete", execute: request });
 }

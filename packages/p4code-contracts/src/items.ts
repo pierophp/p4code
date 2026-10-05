@@ -132,6 +132,14 @@ class Items extends HttpApiGroup.make("items")
     ).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
+    HttpApiEndpoint.delete("delete", "/api/p4code/projects/:projectId/items/:itemId", {
+      params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
+      headers,
+      success: Schema.Void,
+      error: errors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
     HttpApiEndpoint.post("create", "/api/p4code/projects/:projectId/items", {
       params,
       headers,
