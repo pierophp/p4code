@@ -5,6 +5,7 @@
   "apps/web/src/components/sidebar/SidebarChrome.tsx": "Future Items sidebar entry",
   "apps/web/src/components/CommandPalette.tsx": "Items command palette entry",
   "apps/server/src/mcp/McpHttpServer.ts": "Register the p4code Items MCP toolkit",
+  "apps/server/src/mcp/toolkits/worktree/registration.test.ts": "Provide p4code Item service dependencies to the MCP toolkit registration test",
   "scripts/build-desktop-artifact.ts": "Desktop product name and bundle identifier override from fork-owned declaration data; one marked block",
   "pnpm-lock.yaml": "Generated workspace dependency metadata for p4code packages; counted separately from source integration blocks"
 }

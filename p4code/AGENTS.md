@@ -12,7 +12,9 @@ data; it is not a workspace package.
 upstream-owned paths and the reason for each. Read it before editing an upstream
 file. Its five source integration files cover server startup and future route
 composition, sidebar chrome, the command palette, MCP toolkit registration, and
-the desktop build override. The web workspace manifest, generated route registry,
+the desktop build override. The MCP registration test is a separately declared
+upstream-owned test path, without an integration source block. The web workspace
+manifest, generated route registry,
 and generated workspace dependency metadata in `pnpm-lock.yaml` are declared and
 checked separately from source integration blocks, without block markers. Change
 that list only when the requested work explicitly authorizes a new integration

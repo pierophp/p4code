@@ -82,7 +82,9 @@ The five declared source integration files are the server entry point, sidebar
 chrome, command palette, MCP registration, and desktop build script. The web
 workspace manifest, generated route registry, and generated workspace dependency
 metadata in `pnpm-lock.yaml` are also declared and checked separately from source
-integration blocks; these files do not use block markers.
+integration blocks; these files do not use block markers. The MCP worktree
+registration test is separately declared as an upstream-owned test path and does
+not contain an integration source block.
 
 Run the `p4code:footprint` command from the repository root:
 
