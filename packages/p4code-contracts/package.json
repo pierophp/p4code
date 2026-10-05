@@ -1,0 +1,19 @@
+{
+  "name": "@p4code/contracts",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./items": "./src/items.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@t3tools/contracts": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "vite-plus": "catalog:"
+  }
+}

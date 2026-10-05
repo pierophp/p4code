@@ -3,13 +3,17 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./homeLock": "./src/homeLock.ts"
+    "./homeLock": "./src/homeLock.ts",
+    "./integration": "./src/integration.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
+    "@p4code/contracts": "workspace:*",
+    "@t3tools/contracts": "workspace:*",
+    "@t3tools/shared": "workspace:*",
     "effect": "catalog:",
     "proper-lockfile": "4.1.2"
   },

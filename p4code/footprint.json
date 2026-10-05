@@ -1,5 +1,7 @@
 {
   "apps/server/src/server.ts": "T3 home startup lock (#2) and future HTTP route composition; one shared marked block",
+  "apps/web/package.json": "Workspace dependency on p4code web integration package",
+  "apps/web/src/routeTree.gen.ts": "Generated route registry for the p4code Items route",
   "apps/web/src/components/sidebar/SidebarChrome.tsx": "Future Items sidebar entry",
   "scripts/build-desktop-artifact.ts": "Desktop product name and bundle identifier override from fork-owned declaration data; one marked block",
   "pnpm-lock.yaml": "Generated workspace dependency metadata for p4code packages; counted separately from source integration blocks"

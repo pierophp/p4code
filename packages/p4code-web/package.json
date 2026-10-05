@@ -1,0 +1,24 @@
+{
+  "name": "@p4code/web",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./items": "./src/items.ts",
+    "./ItemsView": "./src/ItemsView.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@p4code/contracts": "workspace:*",
+    "@t3tools/client-runtime": "workspace:*",
+    "@t3tools/contracts": "workspace:*",
+    "effect": "catalog:",
+    "react": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "~19.3.0",
+    "vite-plus": "catalog:"
+  }
+}

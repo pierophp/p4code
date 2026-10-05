@@ -632,7 +632,18 @@ const commandReadinessLayer = HttpRouter.middleware(
   { global: true },
 );
 
+// p4code:begin server integration
+import * as P4code from "../../../packages/p4code-core/src/integration.ts";
+export const runServer = Effect.scoped(
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    yield* P4code.acquire(config.baseDir).pipe(Effect.provide(NodeServices.layer));
+    return yield* Layer.launch(makeServerLayer);
+  }),
+);
 const makeRoutesLayer = Layer.mergeAll(
+  P4code.routesLayer,
+  // p4code:end server integration
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(
       Layer.provide(authHttpApiLayer),
@@ -1038,17 +1049,3 @@ const makeServerLayer = Layer.unwrap(
     );
   }),
 );
-
-// The CLI supplies configuration.
-// p4code:begin home lock
-export const runServer = Effect.scoped(
-  Effect.gen(function* () {
-    const config = yield* ServerConfig.ServerConfig;
-    const HomeLock = yield* Effect.promise(
-      () => import("../../../packages/p4code-core/src/homeLock.ts"),
-    );
-    yield* HomeLock.acquire(config.baseDir).pipe(Effect.provide(NodeServices.layer));
-    return yield* Layer.launch(makeServerLayer);
-  }),
-);
-// p4code:end home lock
