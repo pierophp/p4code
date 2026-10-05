@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+
+const root = fileURLToPath(new URL("../", import.meta.url));
+
+function git(...args) {
+  return execFileSync("git", args, {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 32 * 1024 * 1024,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+}
+
+function paths(output) {
+  return output.split("\0").filter(Boolean);
+}
+
+try {
+  const declared = JSON.parse(readFileSync(new URL("footprint.json", import.meta.url), "utf8"));
+  if (
+    declared === null ||
+    Array.isArray(declared) ||
+    typeof declared !== "object" ||
+    Object.entries(declared).some(([path, reason]) => !path || typeof reason !== "string" || !reason.trim())
+  ) {
+    throw new Error("footprint.json must map repository paths to non-empty reasons.");
+  }
+
+  const upstream = git("rev-parse", "--verify", "upstream/main^{commit}").trim();
+  const baseline = git("merge-base", upstream, "HEAD").trim();
+  const owned = new Set(paths(git("ls-tree", "-r", "--name-only", "-z", upstream)));
+  // Disable rename detection so both the old and new paths are checked.
+  // Comparing to the working tree includes committed, staged, and unstaged edits.
+  const changed = new Set([
+    ...paths(git("diff", "--no-renames", "--name-only", "-z", baseline, "--")),
+    ...paths(git("ls-files", "--others", "--exclude-standard", "-z")),
+  ]);
+  const footprint = [...changed].filter((path) => owned.has(path)).sort();
+  const undeclared = footprint.filter((path) => !Object.hasOwn(declared, path));
+
+  console.log(`p4code:footprint against upstream/main (${upstream.slice(0, 12)}), merge-base ${baseline.slice(0, 12)}`);
+  for (const path of footprint) {
+    console.log(`${Object.hasOwn(declared, path) ? "allowed" : "UNDECLARED"} ${JSON.stringify(path)}`);
+  }
+  if (footprint.length === 0) console.log("No upstream-owned files changed.");
+  if (undeclared.length > 0) {
+    console.error(`Footprint rejected: ${undeclared.length} undeclared upstream-owned path(s).`);
+    process.exitCode = 1;
+  }
+} catch (error) {
+  console.error(`p4code:footprint failed: ${error.message}`);
+  process.exitCode = 1;
+}

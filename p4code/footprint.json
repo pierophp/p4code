@@ -1,0 +1,5 @@
+{
+  "apps/server/src/server.ts": "T3 home startup lock (#2) and future HTTP route composition; one shared marked block",
+  "apps/web/src/components/sidebar/SidebarChrome.tsx": "Future Items sidebar entry",
+  "scripts/build-desktop-artifact.ts": "Future desktop product name and bundle identifier override"
+}
