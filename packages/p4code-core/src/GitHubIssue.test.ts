@@ -3,7 +3,7 @@ import * as Effect from "effect/Effect";
 import * as GitHubIssue from "./GitHubIssue.ts";
 
 const url = "https://github.com/pierophp/p4code/issues/5";
-it.effect("translates gh JSON to the minimal issue snapshot", () =>
+it.effect("maps a complete issue and orders comments by creation time", () =>
   Effect.gen(function* () {
     const adapter = yield* GitHubIssue.GitHubIssue;
     expect(yield* adapter.fetch(url)).toEqual({
@@ -11,12 +11,17 @@ it.effect("translates gh JSON to the minimal issue snapshot", () =>
       title: "Tracer bullet",
       state: "CLOSED",
       author: "pierophp",
+      body: "**Details**",
+      comments: [
+        { author: "alice", body: "First", createdAt: "2024-01-01T00:00:00Z" },
+        { author: "bob", body: "Second", createdAt: "2024-01-02T00:00:00Z" },
+      ],
     });
   }).pipe(
     Effect.provide(
       GitHubIssue.layerWithRunner(() =>
         Promise.resolve(
-          '{"url":"https://github.com/pierophp/p4code/issues/5","title":"Tracer bullet","state":"CLOSED","author":{"login":"pierophp"},"body":"ignored"}',
+          '{"url":"https://github.com/pierophp/p4code/issues/5","title":"Tracer bullet","state":"CLOSED","author":{"login":"pierophp"},"body":"**Details**","comments":[{"author":{"login":"bob"},"body":"Second","createdAt":"2024-01-02T00:00:00Z"},{"author":{"login":"alice"},"body":"First","createdAt":"2024-01-01T00:00:00Z"}]}',
         ),
       ),
     ),

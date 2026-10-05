@@ -11,12 +11,20 @@ export class GitHubIssue extends Context.Service<
   {
     readonly fetch: (url: string) => Effect.Effect<IssueSnapshot, ItemUnavailableError>;
   }
->()("p4code/GitHubIssue") {}
+>()("@p4code/core/GitHubIssue") {}
 const GitHubJson = Schema.Struct({
   url: IssueSnapshot.fields.url,
   title: Schema.String,
   state: IssueSnapshot.fields.state,
   author: Schema.Struct({ login: Schema.String }),
+  body: Schema.String,
+  comments: Schema.Array(
+    Schema.Struct({
+      author: Schema.Struct({ login: Schema.String }),
+      body: Schema.String,
+      createdAt: Schema.String,
+    }),
+  ),
 });
 
 const hasStderr = Schema.is(Schema.Struct({ stderr: Schema.String }));
@@ -26,8 +34,8 @@ const runIssueCommand = (url: string, signal: AbortSignal) =>
   new Promise<string>((resolve, reject) => {
     NodeChildProcess.execFile(
       "gh",
-      ["issue", "view", url, "--json", "url,title,state,author"],
-      { timeout: 30_000, maxBuffer: 1024 * 1024, signal },
+      ["issue", "view", url, "--json", "url,title,state,author,body,comments"],
+      { timeout: 30_000, maxBuffer: 10 * 1024 * 1024, signal },
       (error, stdout, stderr) => {
         if (error) reject({ error, stderr });
         else resolve(stdout);
@@ -58,7 +66,13 @@ export const layerWithRunner = (run: (url: string, signal: AbortSignal) => Promi
           () => new ItemUnavailableError({ message: "GitHub returned an invalid issue snapshot." }),
         ),
       );
-      return { ...issue, author: issue.author.login };
+      return {
+        ...issue,
+        author: issue.author.login,
+        comments: issue.comments
+          .map((comment) => ({ ...comment, author: comment.author.login }))
+          .toSorted((left, right) => left.createdAt.localeCompare(right.createdAt)),
+      };
     }),
   });
 

@@ -1,14 +1,21 @@
 import { useEffect, useState } from "react";
-import type { Item } from "@p4code/contracts/items";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import type { Item, ItemSummary } from "@p4code/contracts/items";
 
 export function ItemsView({
   list,
   create,
+  get,
 }: {
-  list: () => Promise<ReadonlyArray<Item>>;
+  list: () => Promise<ReadonlyArray<ItemSummary>>;
   create: (url: string) => Promise<void>;
+  get: (item: ItemSummary) => Promise<Item>;
 }) {
-  const [items, setItems] = useState<ReadonlyArray<Item>>([]);
+  const [items, setItems] = useState<ReadonlyArray<ItemSummary>>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [detail, setDetail] = useState<{ itemId: string; value: Item } | null>(null);
+  const [detailError, setDetailError] = useState<{ itemId: string; message: string } | null>(null);
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,6 +38,30 @@ export function ItemsView({
       active = false;
     };
   }, [list]);
+  useEffect(() => {
+    const item = items.find((candidate) => candidate.id === selected);
+    if (!item) return;
+    let active = true;
+    void get(item).then(
+      (value) => {
+        if (active) setDetail({ itemId: item.id, value });
+      },
+      (error: unknown) => {
+        if (active)
+          setDetailError({
+            itemId: item.id,
+            message: error instanceof Error ? error.message : String(error),
+          });
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [get, items, selected]);
+  const selectedDetail = detail?.itemId === selected ? detail.value : null;
+  const selectedDetailError = detailError?.itemId === selected ? detailError.message : null;
+  const detailLoading =
+    selected !== null && selectedDetail === null && selectedDetailError === null;
   return (
     <main className="mx-auto flex w-full max-w-3xl flex-col gap-6 p-6">
       <h1 className="text-2xl font-semibold">Items</h1>
@@ -79,13 +110,72 @@ export function ItemsView({
         <ul className="flex flex-col gap-3">
           {items.map((item) => (
             <li key={item.id} className="rounded border p-4">
-              <a className="font-medium underline" href={item.url} target="_blank" rel="noreferrer">
+              <button
+                className="font-medium underline"
+                type="button"
+                aria-expanded={selected === item.id}
+                onClick={() => setSelected(selected === item.id ? null : item.id)}
+              >
                 {item.title}
-              </a>
+              </button>
               <p>
                 {item.state.toLowerCase()} · {item.author}
               </p>
               <p className="break-all text-sm text-muted-foreground">{item.url}</p>
+              {selected === item.id && (
+                <section className="mt-4 flex min-w-0 flex-col gap-5 border-t pt-4">
+                  {detailLoading ? (
+                    <p role="status">Loading issue details…</p>
+                  ) : selectedDetailError ? (
+                    <p role="alert">{selectedDetailError}</p>
+                  ) : selectedDetail ? (
+                    <>
+                      <article className="min-w-0 break-words">
+                        <h2 className="mb-2 font-semibold">Issue description</h2>
+                        {selectedDetail.body ? (
+                          <div className="max-w-none overflow-x-auto [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {selectedDetail.body}
+                            </ReactMarkdown>
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No issue description.</p>
+                        )}
+                      </article>
+                      <section className="flex min-w-0 flex-col gap-3" aria-label="Issue comments">
+                        <h2 className="font-semibold">
+                          Comments ({selectedDetail.comments.length})
+                        </h2>
+                        {selectedDetail.comments.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No comments.</p>
+                        ) : (
+                          selectedDetail.comments.map((comment) => (
+                            <article
+                              key={`${comment.createdAt}:${comment.author}:${comment.body}`}
+                              className="min-w-0 rounded border p-3"
+                            >
+                              <header className="mb-2 flex flex-wrap gap-x-2 text-sm">
+                                <strong>{comment.author}</strong>
+                                <time
+                                  dateTime={comment.createdAt}
+                                  className="text-muted-foreground"
+                                >
+                                  {comment.createdAt}
+                                </time>
+                              </header>
+                              <div className="min-w-0 break-words overflow-x-auto [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_pre]:rounded [&_pre]:bg-muted [&_pre]:p-3 [&_table]:block [&_table]:max-w-full [&_table]:overflow-x-auto">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                  {comment.body}
+                                </ReactMarkdown>
+                              </div>
+                            </article>
+                          ))
+                        )}
+                      </section>
+                    </>
+                  ) : null}
+                </section>
+              )}
             </li>
           ))}
         </ul>

@@ -6,7 +6,14 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/unstable/sql/SqlClient";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
-import { Item, IssueUrl, ItemRequestError, ItemUnavailableError } from "@p4code/contracts/items";
+import {
+  Item,
+  ItemSummary,
+  IssueComment,
+  IssueUrl,
+  ItemRequestError,
+  ItemUnavailableError,
+} from "@p4code/contracts/items";
 import type { ProjectId } from "@t3tools/contracts";
 import * as GitHubIssue from "./GitHubIssue.ts";
 
@@ -15,22 +22,30 @@ export class Projects extends Context.Service<
   {
     readonly exists: (projectId: ProjectId) => Effect.Effect<boolean, ItemUnavailableError>;
   }
->()("p4code/Projects") {}
+>()("@p4code/core/ItemService/Projects") {}
 export class ItemService extends Context.Service<
   ItemService,
   {
     readonly list: (
       projectId: ProjectId,
-    ) => Effect.Effect<ReadonlyArray<Item>, ItemRequestError | ItemUnavailableError>;
+    ) => Effect.Effect<ReadonlyArray<ItemSummary>, ItemRequestError | ItemUnavailableError>;
+    readonly get: (
+      projectId: ProjectId,
+      itemId: string,
+    ) => Effect.Effect<Item, ItemRequestError | ItemUnavailableError>;
     readonly create: (
       projectId: ProjectId,
       url: string,
     ) => Effect.Effect<Item, ItemRequestError | ItemUnavailableError>;
   }
->()("p4code/ItemService") {}
+>()("@p4code/core/ItemService") {}
 
-const decodeItems = Schema.decodeUnknownEffect(Schema.Array(Item));
+const decodeSummaries = Schema.decodeUnknownEffect(Schema.Array(ItemSummary));
 const decodeItem = Schema.decodeUnknownEffect(Item);
+const decodeComments = Schema.decodeUnknownEffect(
+  Schema.fromJsonString(Schema.Array(IssueComment)),
+);
+const encodeComments = Schema.encodeSync(Schema.fromJsonString(Schema.Array(IssueComment)));
 const decodeUrl = Schema.decodeUnknownEffect(IssueUrl);
 const isRequestError = Schema.is(ItemRequestError);
 const isUnavailableError = Schema.is(ItemUnavailableError);
@@ -40,7 +55,8 @@ const make = Effect.gen(function* () {
   const github = yield* GitHubIssue.GitHubIssue;
   const projects = yield* Projects;
   const version = yield* sql<{ user_version: number }>`PRAGMA user_version`;
-  if ((version[0]?.user_version ?? 0) > 1)
+  const schemaVersion = version[0]?.user_version ?? 0;
+  if (schemaVersion > 2)
     return yield* new ItemUnavailableError({
       message: "This p4code database requires a newer app.",
     });
@@ -48,10 +64,15 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       yield* sql`CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY, project_id TEXT NOT NULL, url TEXT NOT NULL,
-      title TEXT NOT NULL, state TEXT NOT NULL, author TEXT NOT NULL
+      title TEXT NOT NULL, state TEXT NOT NULL, author TEXT NOT NULL,
+      body TEXT NOT NULL DEFAULT '', comments TEXT NOT NULL DEFAULT '[]'
     )`;
       yield* sql`CREATE INDEX IF NOT EXISTS items_project ON items(project_id)`;
-      yield* sql`PRAGMA user_version = 1`;
+      if (schemaVersion === 1) {
+        yield* sql`ALTER TABLE items ADD COLUMN body TEXT NOT NULL DEFAULT ''`;
+        yield* sql`ALTER TABLE items ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'`;
+      }
+      yield* sql`PRAGMA user_version = 2`;
     }),
   );
   const requireProject = Effect.fn(function* (projectId: ProjectId) {
@@ -63,7 +84,7 @@ const make = Effect.gen(function* () {
       yield* requireProject(projectId);
       const rows =
         yield* sql`SELECT CAST(id AS TEXT) AS id, project_id AS "projectId", url, title, state, author FROM items WHERE project_id = ${projectId} ORDER BY rowid`;
-      return yield* decodeItems(rows);
+      return yield* decodeSummaries(rows);
     },
     Effect.mapError((cause) =>
       isRequestError(cause) || isUnavailableError(cause)
@@ -85,7 +106,7 @@ const make = Effect.gen(function* () {
       const issue = yield* github.fetch(validUrl);
       const rows = yield* sql<{
         id: string;
-      }>`INSERT INTO items (project_id, url, title, state, author) VALUES (${projectId}, ${issue.url}, ${issue.title}, ${issue.state}, ${issue.author}) RETURNING CAST(id AS TEXT) AS id`;
+      }>`INSERT INTO items (project_id, url, title, state, author, body, comments) VALUES (${projectId}, ${issue.url}, ${issue.title}, ${issue.state}, ${issue.author}, ${issue.body}, ${encodeComments(issue.comments)}) RETURNING CAST(id AS TEXT) AS id`;
       return yield* decodeItem({ id: rows[0]?.id, projectId, ...issue });
     },
     Effect.mapError((cause) =>
@@ -94,7 +115,24 @@ const make = Effect.gen(function* () {
         : new ItemUnavailableError({ message: "Could not create the Item." }),
     ),
   );
-  return ItemService.of({ list, create });
+  const get = Effect.fn("ItemService.get")(
+    function* (projectId: ProjectId, itemId: string) {
+      yield* requireProject(projectId);
+      const rows =
+        yield* sql`SELECT CAST(id AS TEXT) AS id, project_id AS "projectId", url, title, state, author, body, comments FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
+      const row = rows[0];
+      if (!row) return yield* new ItemRequestError({ message: "Item not found." });
+      const comments = yield* decodeComments(String(row.comments));
+      const item = { ...row, comments };
+      return yield* decodeItem(item);
+    },
+    Effect.mapError((cause) =>
+      isRequestError(cause) || isUnavailableError(cause)
+        ? cause
+        : new ItemUnavailableError({ message: "Could not read the Item." }),
+    ),
+  );
+  return ItemService.of({ list, get, create });
 });
 
 /** A private SQL layer keeps p4code queries away from T3's database service. */

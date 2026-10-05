@@ -15,7 +15,9 @@
     "@t3tools/client-runtime": "workspace:*",
     "@t3tools/contracts": "workspace:*",
     "effect": "catalog:",
-    "react": "19.2.6"
+    "react": "19.2.6",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "devDependencies": {
     "@types/react": "~19.3.0",

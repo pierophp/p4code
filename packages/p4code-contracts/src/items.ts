@@ -13,17 +13,34 @@ export const IssueUrl = Schema.String.check(
     /^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+\/issues\/[1-9][0-9]*$/,
   ),
 );
+export const IssueComment = Schema.Struct({
+  author: Schema.String,
+  body: Schema.String,
+  createdAt: Schema.String,
+});
+export type IssueComment = typeof IssueComment.Type;
 export const IssueSnapshot = Schema.Struct({
   url: IssueUrl,
   title: Schema.String,
   state: Schema.Literals(["OPEN", "CLOSED"]),
   author: Schema.String,
+  body: Schema.String,
+  comments: Schema.Array(IssueComment),
 });
 export type IssueSnapshot = typeof IssueSnapshot.Type;
-export const Item = Schema.Struct({
+export const ItemSummary = Schema.Struct({
   id: Schema.String,
   projectId: ProjectId,
-  ...IssueSnapshot.fields,
+  url: IssueUrl,
+  title: Schema.String,
+  state: Schema.Literals(["OPEN", "CLOSED"]),
+  author: Schema.String,
+});
+export type ItemSummary = typeof ItemSummary.Type;
+export const Item = Schema.Struct({
+  ...ItemSummary.fields,
+  body: Schema.String,
+  comments: IssueSnapshot.fields.comments,
 });
 export type Item = typeof Item.Type;
 export class ItemRequestError extends Schema.TaggedError<ItemRequestError>()(
@@ -51,7 +68,15 @@ class Items extends HttpApiGroup.make("items")
     HttpApiEndpoint.get("list", "/api/p4code/projects/:projectId/items", {
       params,
       headers,
-      success: Schema.Array(Item),
+      success: Schema.Array(ItemSummary),
+      error: errors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.get("get", "/api/p4code/projects/:projectId/items/:itemId", {
+      params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
+      headers,
+      success: Item,
       error: errors,
     }).middleware(EnvironmentAuthenticatedAuth),
   )

@@ -1,3 +1,4 @@
+// @effect-diagnostics nodeBuiltinImport:off - Tests exercise the real SQLite HTTP boundary in temp directories.
 import { afterEach, expect, it } from "vite-plus/test";
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
@@ -28,6 +29,11 @@ const issue = {
   title: "Tracer bullet",
   state: "OPEN" as const,
   author: "pierophp",
+  body: "# Description\n\nLong context.",
+  comments: [
+    { author: "reviewer", body: "Looks good.", createdAt: "2024-01-01T00:00:00Z" },
+    { author: "maintainer", body: "Thanks!", createdAt: "2024-01-02T00:00:00Z" },
+  ],
 };
 async function fixture(
   filename: string,
@@ -87,6 +93,8 @@ const request = (project: string, url?: string) =>
           body: JSON.stringify({ url }),
         },
   );
+const detailRequest = (project: string, id: string) =>
+  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}`);
 it("creates an issue snapshot and lists only its Project, including after reopening SQLite", async () => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "p4code-items-"));
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));
@@ -97,10 +105,31 @@ it("creates an issue snapshot and lists only its Project, including after reopen
   const item = await created.json();
   expect(item).toEqual({ id: expect.any(String), projectId: "project-a", ...issue });
   expect(await (await app.handler(request("project-b"))).json()).toEqual([]);
+  expect(await (await app.handler(request("project-a"))).json()).toEqual([
+    {
+      id: item.id,
+      projectId: "project-a",
+      url: issue.url,
+      title: issue.title,
+      state: issue.state,
+      author: issue.author,
+    },
+  ]);
+  expect(await (await app.handler(detailRequest("project-a", item.id))).json()).toEqual(item);
   await app.dispose();
   cleanup.pop();
   const reopened = await fixture(filename);
-  expect(await (await reopened.handler(request("project-a"))).json()).toEqual([item]);
+  expect(await (await reopened.handler(request("project-a"))).json()).toEqual([
+    {
+      id: item.id,
+      projectId: "project-a",
+      url: issue.url,
+      title: issue.title,
+      state: issue.state,
+      author: issue.author,
+    },
+  ]);
+  expect(await (await reopened.handler(detailRequest("project-a", item.id))).json()).toEqual(item);
 });
 
 async function temporaryDatabase() {
@@ -123,11 +152,51 @@ it("requires operate scope to create and read scope to list", async () => {
   const app = await fixture(await temporaryDatabase(), { scopes: [] });
   expect((await app.handler(request("project-a", issue.url))).status).toBe(403);
   expect((await app.handler(request("project-a"))).status).toBe(403);
+  expect((await app.handler(detailRequest("project-a", "1"))).status).toBe(403);
 });
 it("rejects Projects that do not exist", async () => {
   const app = await fixture(await temporaryDatabase(), { exists: false });
   expect((await app.handler(request("missing", issue.url))).status).toBe(400);
   expect((await app.handler(request("missing"))).status).toBe(400);
+  expect((await app.handler(detailRequest("missing", "1"))).status).toBe(400);
+});
+
+it("returns a clean not-found response for an Item outside the Project", async () => {
+  const app = await fixture(await temporaryDatabase());
+  const response = await app.handler(detailRequest("project-a", "900"));
+  expect(response.status).toBe(400);
+  expect(await response.json()).toEqual({ _tag: "ItemRequestError", message: "Item not found." });
+});
+
+it("serves empty comments and long cached Markdown through the detail route", async () => {
+  const longBody = `# Issue details\n\n${"A useful paragraph.\n\n".repeat(5_000)}`;
+  const longComment = "Please keep this context readable. ".repeat(8_000);
+  const app = await fixture(await temporaryDatabase(), {
+    adapter: {
+      fetch: () => Effect.succeed({ ...issue, body: longBody, comments: [] }),
+    },
+  });
+  const created = await app.handler(request("project-a", issue.url));
+  const item = await created.json();
+  const detail = await (await app.handler(detailRequest("project-a", item.id))).json();
+  expect(detail.body).toBe(longBody);
+  expect(detail.comments).toEqual([]);
+
+  const longApp = await fixture(await temporaryDatabase(), {
+    adapter: {
+      fetch: () =>
+        Effect.succeed({
+          ...issue,
+          body: longBody,
+          comments: [{ author: "reviewer", body: longComment, createdAt: "2024-01-01T00:00:00Z" }],
+        }),
+    },
+  });
+  const longCreated = await longApp.handler(request("project-a", issue.url));
+  const longItem = await longCreated.json();
+  const longDetail = await (await longApp.handler(detailRequest("project-a", longItem.id))).json();
+  expect(longDetail.body).toBe(longBody);
+  expect(longDetail.comments[0].body).toBe(longComment);
 });
 
 it("reports adapter failures without saving a partial Item", async () => {

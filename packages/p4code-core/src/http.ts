@@ -20,6 +20,13 @@ const handlers = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "get",
+        Effect.fn(function* ({ params }) {
+          yield* requireEnvironmentScope(AuthOrchestrationReadScope);
+          return yield* items.get(params.projectId, params.itemId);
+        }),
+      )
+      .handle(
         "create",
         Effect.fn(function* ({ params, payload }) {
           yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
