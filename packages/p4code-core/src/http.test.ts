@@ -42,6 +42,7 @@ async function fixture(
     exists?: boolean;
     adapter?: GitHubIssue.GitHubIssue["Service"];
     threadLauncher?: ItemService.ItemThreadLauncher["Service"];
+    threadReader?: ItemService.ItemThreadReader["Service"];
   } = {},
 ) {
   let threadLaunchCount = 0;
@@ -61,6 +62,12 @@ async function fixture(
               options.threadLauncher ?? {
                 launch: () => Effect.succeed(`thread-created-${++threadLaunchCount}`),
               },
+            ),
+          ),
+          Layer.provide(
+            Layer.succeed(
+              ItemService.ItemThreadReader,
+              options.threadReader ?? { isAvailable: () => Effect.succeed(true) },
             ),
           ),
           Layer.provide(
@@ -152,8 +159,8 @@ it("creates an issue snapshot and lists only its Project, including after reopen
     threadId: "thread-created-2",
   });
   expect((await (await app.handler(detailRequest("project-a", item.id))).json()).threads).toEqual([
-    { threadId: "thread-created-1" },
-    { threadId: "thread-created-2" },
+    { threadId: "thread-created-1", available: true },
+    { threadId: "thread-created-2", available: true },
   ]);
   await app.dispose();
   cleanup.pop();
@@ -172,8 +179,8 @@ it("creates an issue snapshot and lists only its Project, including after reopen
   expect(reopenedDetail.body).toBe(issue.body);
   expect(reopenedDetail.comments).toEqual(issue.comments);
   expect(reopenedDetail.threads).toEqual([
-    { threadId: "thread-created-1" },
-    { threadId: "thread-created-2" },
+    { threadId: "thread-created-1", available: true },
+    { threadId: "thread-created-2", available: true },
   ]);
   expect(Date.parse(reopenedDetail.lastRefreshedAt)).toBeGreaterThanOrEqual(
     Date.parse(item.lastRefreshedAt),
@@ -243,6 +250,54 @@ async function temporaryDatabase() {
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));
   return NodePath.join(dir, "p4code.sqlite");
 }
+
+it("keeps the cached Item and every Thread link when only some Threads are unavailable", async () => {
+  const available = new Map<string, boolean>([
+    ["thread-created-1", false],
+    ["thread-created-2", true],
+  ]);
+  let fetchCount = 0;
+  const app = await fixture(await temporaryDatabase(), {
+    adapter: {
+      fetch: () =>
+        ++fetchCount === 1
+          ? Effect.succeed(issue)
+          : Effect.fail(new ItemUnavailableError({ message: "GitHub is unavailable." })),
+    },
+    threadReader: {
+      isAvailable: ({ threadId }) => Effect.succeed(available.get(threadId) ?? true),
+    },
+  });
+  const created = await app.handler(request("project-a", issue.url));
+  const item = await created.json();
+  await app.handler(startThreadRequest("project-a", item.id));
+  await app.handler(startThreadRequest("project-a", item.id));
+
+  const opened = await app.handler(detailRequest("project-a", item.id));
+  expect(opened.status).toBe(200);
+  expect(await opened.json()).toEqual({
+    ...item,
+    refreshError: "GitHub is unavailable.",
+    threads: [
+      { threadId: "thread-created-1", available: false },
+      { threadId: "thread-created-2", available: true },
+    ],
+  });
+  expect(await (await app.handler(request("project-a"))).json()).toHaveLength(1);
+
+  const replacement = await app.handler(startThreadRequest("project-a", item.id));
+  expect(await replacement.json()).toEqual({ threadId: "thread-created-3" });
+  const afterReplacement = await (await app.handler(detailRequest("project-a", item.id))).json();
+  expect(afterReplacement.threads).toEqual([
+    { threadId: "thread-created-1", available: false },
+    { threadId: "thread-created-2", available: true },
+    { threadId: "thread-created-3", available: true },
+  ]);
+  expect(afterReplacement.title).toBe(issue.title);
+  expect(afterReplacement.body).toBe(issue.body);
+  expect(afterReplacement.comments).toEqual(issue.comments);
+  expect(await (await app.handler(request("project-a"))).json()).toHaveLength(1);
+});
 it("rejects malformed issue URLs without creating an Item", async () => {
   const app = await fixture(await temporaryDatabase());
   for (const url of [

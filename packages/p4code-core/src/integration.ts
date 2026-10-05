@@ -7,6 +7,7 @@ import {
   DEFAULT_MODEL,
   DEFAULT_PROVIDER_INTERACTION_MODE,
   ProviderInstanceId,
+  ThreadId,
 } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
@@ -14,6 +15,7 @@ import { ItemUnavailableError } from "@p4code/contracts/items";
 import * as ServerConfig from "../../../apps/server/src/config.ts";
 import * as ServerSettings from "../../../apps/server/src/serverSettings.ts";
 import * as ThreadLaunch from "../../../apps/server/src/orchestration-v2/ThreadLaunchService.ts";
+import * as ThreadManagement from "../../../apps/server/src/orchestration-v2/ThreadManagementService.ts";
 import * as ProjectStore from "../../../apps/server/src/orchestration-v2/ProjectStore.ts";
 import { environmentAuthenticatedAuthLayer } from "../../../apps/server/src/auth/http.ts";
 import * as ItemService from "./ItemService.ts";
@@ -70,6 +72,20 @@ const itemThreadLauncher = Layer.effect(
     } satisfies ItemService.ItemThreadLauncher["Service"];
   }),
 );
+const itemThreadReader = Layer.effect(
+  ItemService.ItemThreadReader,
+  Effect.gen(function* () {
+    const threads = yield* ThreadManagement.ThreadManagementService;
+    return {
+      isAvailable: ({ projectId, threadId }) =>
+        threads.getProjectThread({ projectId, threadId: ThreadId.make(threadId) }).pipe(
+          Effect.as(true),
+          Effect.catchTag("ThreadManagementThreadNotFoundError", () => Effect.succeed(false)),
+          Effect.mapError(() => new ItemUnavailableError({ message: "Could not read a Thread." })),
+        ),
+    } satisfies ItemService.ItemThreadReader["Service"];
+  }),
+);
 export const routesLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
@@ -79,6 +95,7 @@ export const routesLayer = Layer.unwrap(
         ItemService.layer(path.join(config.stateDir, "p4code.sqlite")).pipe(
           Layer.provide(GitHubIssue.layer),
           Layer.provide(itemThreadLauncher),
+          Layer.provide(itemThreadReader),
           Layer.provide(projects),
         ),
       ),

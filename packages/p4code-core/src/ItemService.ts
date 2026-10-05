@@ -34,6 +34,15 @@ export class ItemThreadLauncher extends Context.Service<
     }) => Effect.Effect<string, ItemUnavailableError>;
   }
 >()("@p4code/core/ItemService/ItemThreadLauncher") {}
+export class ItemThreadReader extends Context.Service<
+  ItemThreadReader,
+  {
+    readonly isAvailable: (input: {
+      readonly projectId: ProjectId;
+      readonly threadId: string;
+    }) => Effect.Effect<boolean, ItemUnavailableError>;
+  }
+>()("@p4code/core/ItemService/ItemThreadReader") {}
 export class ItemService extends Context.Service<
   ItemService,
   {
@@ -74,6 +83,7 @@ const make = Effect.gen(function* () {
   const github = yield* GitHubIssue.GitHubIssue;
   const projects = yield* Projects;
   const threadLauncher = yield* ItemThreadLauncher;
+  const threadReader = yield* ItemThreadReader;
   const version = yield* sql<{ user_version: number }>`PRAGMA user_version`;
   const schemaVersion = version[0]?.user_version ?? 0;
   if (schemaVersion > 4)
@@ -106,12 +116,16 @@ const make = Effect.gen(function* () {
     if (!(yield* projects.exists(projectId)))
       return yield* new ItemRequestError({ message: "Project not found." });
   });
-  const listThreads = (itemId: string) =>
+  const listThreads = (projectId: ProjectId, itemId: string) =>
     Effect.gen(function* () {
       const rows = yield* sql<{
         threadId: string;
       }>`SELECT thread_id AS "threadId" FROM item_threads WHERE item_id = ${itemId} ORDER BY id`;
-      return rows.map(({ threadId }) => ({ threadId }));
+      return yield* Effect.forEach(rows, ({ threadId }) =>
+        threadReader
+          .isAvailable({ projectId, threadId })
+          .pipe(Effect.map((available) => ({ threadId, available }))),
+      );
     });
   const list = Effect.fn("ItemService.list")(
     function* (projectId: ProjectId) {
@@ -170,7 +184,7 @@ const make = Effect.gen(function* () {
       const cached = yield* decodeItem({
         ...row,
         comments,
-        threads: yield* listThreads(itemId),
+        threads: yield* listThreads(projectId, itemId),
         refreshError: null,
       });
       return yield* github.fetch(cached.url).pipe(

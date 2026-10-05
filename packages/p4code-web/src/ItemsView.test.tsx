@@ -32,7 +32,10 @@ const detail: Item = {
   ...summary,
   body: "Issue body",
   comments: [],
-  threads: [{ threadId: "thread-existing" }],
+  threads: [
+    { threadId: "thread-existing", available: true },
+    { threadId: "thread-deleted", available: false },
+  ],
   lastRefreshedAt: null,
   refreshError: null,
 };
@@ -64,9 +67,15 @@ it("shows associated Threads and opens an existing or newly started Thread", asy
   expect(existing).toBeDefined();
   await act(async () => existing?.click());
   expect(openThread).toHaveBeenLastCalledWith("thread-existing");
+  expect(container.textContent).toContain("Thread unavailable thread-deleted");
+  expect(
+    [...container.querySelectorAll("button")].some((button) =>
+      button.textContent?.includes("thread-deleted"),
+    ),
+  ).toBe(false);
 
   const start = [...container.querySelectorAll("button")].find(
-    (button) => button.textContent === "Start Thread",
+    (button) => button.textContent === "Start replacement Thread",
   );
   expect(start).toBeDefined();
   await act(async () => start?.click());

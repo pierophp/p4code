@@ -71,6 +71,7 @@ export function ItemsView({
     };
   }, [get, items, selected]);
   const selectedDetail = detail?.itemId === selected ? detail.value : null;
+  const hasUnavailableThread = selectedDetail?.threads.some(({ available }) => !available) ?? false;
   const selectedDetailError = detailError?.itemId === selected ? detailError.message : null;
   const detailLoading =
     selected !== null && selectedDetail === null && selectedDetailError === null;
@@ -192,22 +193,32 @@ export function ItemsView({
                               }
                             }}
                           >
-                            {startingThread === selectedDetail.id ? "Starting…" : "Start Thread"}
+                            {startingThread === selectedDetail.id
+                              ? "Starting…"
+                              : hasUnavailableThread
+                                ? "Start replacement Thread"
+                                : "Start Thread"}
                           </button>
                         </div>
                         {selectedDetail.threads.length === 0 ? (
                           <p className="text-sm text-muted-foreground">No Threads yet.</p>
                         ) : (
                           <ul className="flex flex-col gap-1">
-                            {selectedDetail.threads.map(({ threadId }) => (
+                            {selectedDetail.threads.map(({ threadId, available }) => (
                               <li key={threadId}>
-                                <button
-                                  className="break-all text-left text-sm underline"
-                                  type="button"
-                                  onClick={() => openThread(threadId)}
-                                >
-                                  Open Thread {threadId}
-                                </button>
+                                {available ? (
+                                  <button
+                                    className="break-all text-left text-sm underline"
+                                    type="button"
+                                    onClick={() => openThread(threadId)}
+                                  >
+                                    Open Thread {threadId}
+                                  </button>
+                                ) : (
+                                  <span className="break-all text-sm text-muted-foreground">
+                                    Thread unavailable {threadId}
+                                  </span>
+                                )}
                               </li>
                             ))}
                           </ul>
