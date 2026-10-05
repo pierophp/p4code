@@ -3725,6 +3725,22 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     },
   };
 
+  // p4code:begin desktop-identity
+  const { applyDesktopIdentity, desktopIdentity } = yield* Effect.promise(
+    () => import("./lib/p4code-desktop-identity.ts"),
+  );
+  Object.assign(
+    stagePackageJson,
+    applyDesktopIdentity(stagePackageJson, options.platform, appVersion),
+  );
+  if (macPasskeySigning && macEntitlementsPath) {
+    yield* fs.writeFileString(
+      macEntitlementsPath,
+      renderMacPasskeyEntitlements({ ...macPasskeySigning, appId: desktopIdentity.appId }),
+    );
+  }
+  // p4code:end desktop-identity
+
   const stagePackageJsonString = yield* encodeJsonString(stagePackageJson);
   yield* fs.writeFileString(path.join(stageAppDir, "package.json"), `${stagePackageJsonString}\n`);
   const stageWorkspaceConfig = createStageWorkspaceConfig({

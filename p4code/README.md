@@ -26,11 +26,11 @@ replaced by a new Thread.
 All feature logic belongs in new workspace packages covered by the existing
 `packages/*` glob:
 
-| Package | Responsibility |
-| --- | --- |
-| `packages/p4code-core` | Item domain, SQLite store, GitHub CLI adapter, service methods, HTTP routes, and MCP tools |
-| `packages/p4code-contracts` | Request and response schemas shared by server and client |
-| `packages/p4code-web` | React components and client data access for Items |
+| Package                     | Responsibility                                                                             |
+| --------------------------- | ------------------------------------------------------------------------------------------ |
+| `packages/p4code-core`      | Item domain, SQLite store, GitHub CLI adapter, service methods, HTTP routes, and MCP tools |
+| `packages/p4code-contracts` | Request and response schemas shared by server and client                                   |
+| `packages/p4code-web`       | React components and client data access for Items                                          |
 
 These boundaries follow the server, contract, and UI seams of a future plugin.
 Moving the packages into a plugin should not require first untangling feature
@@ -61,8 +61,10 @@ event sourcing. Thread identifiers are plain values with no cross-database
 foreign keys.
 
 The desktop fork installs alongside T3 Code with a distinct product name and
-bundle identifier supplied by a build override, rather than changes to the
-upstream desktop package manifest. Both use the same T3 home and therefore the
+bundle identifier supplied by [desktop-identity.json](desktop-identity.json) at
+artifact staging time, rather than changes to the upstream desktop package
+manifest. Signed macOS builds need a provisioning profile for the fork's bundle
+identifier. Both use the same T3 home and therefore the
 same Projects, Threads, and settings. Only one server may hold that home at a
 time: the startup lock refuses a second instance and names the locked directory.
 The lock is a safety prerequisite for sharing the home, not an optional feature.
