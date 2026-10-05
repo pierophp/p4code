@@ -41,8 +41,10 @@ async function fixture(
     scopes?: ReadonlyArray<import("@t3tools/contracts").AuthEnvironmentScope>;
     exists?: boolean;
     adapter?: GitHubIssue.GitHubIssue["Service"];
+    threadLauncher?: ItemService.ItemThreadLauncher["Service"];
   } = {},
 ) {
+  let threadLaunchCount = 0;
   const app = HttpRouter.toWebHandler(
     routes.pipe(
       Layer.provide(
@@ -51,6 +53,14 @@ async function fixture(
             Layer.succeed(
               GitHubIssue.GitHubIssue,
               options.adapter ?? { fetch: () => Effect.succeed(issue) },
+            ),
+          ),
+          Layer.provide(
+            Layer.succeed(
+              ItemService.ItemThreadLauncher,
+              options.threadLauncher ?? {
+                launch: () => Effect.succeed(`thread-created-${++threadLaunchCount}`),
+              },
             ),
           ),
           Layer.provide(
@@ -99,6 +109,10 @@ const refreshRequest = (project: string, id: string) =>
   new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/refresh`, {
     method: "POST",
   });
+const startThreadRequest = (project: string, id: string) =>
+  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/threads`, {
+    method: "POST",
+  });
 it("creates an issue snapshot and lists only its Project, including after reopening SQLite", async () => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "p4code-items-"));
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));
@@ -111,6 +125,7 @@ it("creates an issue snapshot and lists only its Project, including after reopen
     id: expect.any(String),
     projectId: "project-a",
     ...issue,
+    threads: [],
     lastRefreshedAt: expect.any(String),
     refreshError: null,
   });
@@ -130,6 +145,16 @@ it("creates an issue snapshot and lists only its Project, including after reopen
   expect(Date.parse(detail.lastRefreshedAt)).toBeGreaterThanOrEqual(
     Date.parse(item.lastRefreshedAt),
   );
+  expect(await (await app.handler(startThreadRequest("project-a", item.id))).json()).toEqual({
+    threadId: "thread-created-1",
+  });
+  expect(await (await app.handler(startThreadRequest("project-a", item.id))).json()).toEqual({
+    threadId: "thread-created-2",
+  });
+  expect((await (await app.handler(detailRequest("project-a", item.id))).json()).threads).toEqual([
+    { threadId: "thread-created-1" },
+    { threadId: "thread-created-2" },
+  ]);
   await app.dispose();
   cleanup.pop();
   const reopened = await fixture(filename);
@@ -146,6 +171,10 @@ it("creates an issue snapshot and lists only its Project, including after reopen
   const reopenedDetail = await (await reopened.handler(detailRequest("project-a", item.id))).json();
   expect(reopenedDetail.body).toBe(issue.body);
   expect(reopenedDetail.comments).toEqual(issue.comments);
+  expect(reopenedDetail.threads).toEqual([
+    { threadId: "thread-created-1" },
+    { threadId: "thread-created-2" },
+  ]);
   expect(Date.parse(reopenedDetail.lastRefreshedAt)).toBeGreaterThanOrEqual(
     Date.parse(item.lastRefreshedAt),
   );

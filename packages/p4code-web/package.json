@@ -8,7 +8,8 @@
     "./ItemsView": "./src/ItemsView.tsx"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vp test run --config ../../vite.config.ts --dir ."
   },
   "dependencies": {
     "@p4code/contracts": "workspace:*",
@@ -21,6 +22,9 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "@types/react-dom": "~19.2.3",
+    "jsdom": "^30.0.1",
+    "react-dom": "19.2.6",
     "vite-plus": "catalog:"
   }
 }

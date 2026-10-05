@@ -37,10 +37,13 @@ export const ItemSummary = Schema.Struct({
   author: Schema.String,
 });
 export type ItemSummary = typeof ItemSummary.Type;
+export const ItemThread = Schema.Struct({ threadId: Schema.String });
+export type ItemThread = typeof ItemThread.Type;
 export const Item = Schema.Struct({
   ...ItemSummary.fields,
   body: Schema.String,
   comments: IssueSnapshot.fields.comments,
+  threads: Schema.Array(ItemThread),
   lastRefreshedAt: Schema.NullOr(Schema.String),
   refreshError: Schema.NullOr(Schema.String),
 });
@@ -87,6 +90,14 @@ class Items extends HttpApiGroup.make("items")
       params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
       headers,
       success: Item,
+      error: errors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("startThread", "/api/p4code/projects/:projectId/items/:itemId/threads", {
+      params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
+      headers,
+      success: ItemThread,
       error: errors,
     }).middleware(EnvironmentAuthenticatedAuth),
   )

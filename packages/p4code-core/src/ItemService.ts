@@ -25,6 +25,15 @@ export class Projects extends Context.Service<
     readonly exists: (projectId: ProjectId) => Effect.Effect<boolean, ItemUnavailableError>;
   }
 >()("@p4code/core/ItemService/Projects") {}
+export class ItemThreadLauncher extends Context.Service<
+  ItemThreadLauncher,
+  {
+    readonly launch: (input: {
+      readonly projectId: ProjectId;
+      readonly title: string;
+    }) => Effect.Effect<string, ItemUnavailableError>;
+  }
+>()("@p4code/core/ItemService/ItemThreadLauncher") {}
 export class ItemService extends Context.Service<
   ItemService,
   {
@@ -39,6 +48,10 @@ export class ItemService extends Context.Service<
       projectId: ProjectId,
       itemId: string,
     ) => Effect.Effect<Item, ItemRequestError | ItemUnavailableError>;
+    readonly startThread: (
+      projectId: ProjectId,
+      itemId: string,
+    ) => Effect.Effect<string, ItemRequestError | ItemUnavailableError>;
     readonly create: (
       projectId: ProjectId,
       url: string,
@@ -60,9 +73,10 @@ const make = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
   const github = yield* GitHubIssue.GitHubIssue;
   const projects = yield* Projects;
+  const threadLauncher = yield* ItemThreadLauncher;
   const version = yield* sql<{ user_version: number }>`PRAGMA user_version`;
   const schemaVersion = version[0]?.user_version ?? 0;
-  if (schemaVersion > 3)
+  if (schemaVersion > 4)
     return yield* new ItemUnavailableError({
       message: "This p4code database requires a newer app.",
     });
@@ -71,21 +85,34 @@ const make = Effect.gen(function* () {
       yield* sql`CREATE TABLE IF NOT EXISTS items (
       id INTEGER PRIMARY KEY, project_id TEXT NOT NULL, url TEXT NOT NULL,
       title TEXT NOT NULL, state TEXT NOT NULL, author TEXT NOT NULL,
-      body TEXT NOT NULL DEFAULT '', comments TEXT NOT NULL DEFAULT '[]'
+      body TEXT NOT NULL DEFAULT '', comments TEXT NOT NULL DEFAULT '[]', last_refreshed_at TEXT
     )`;
       yield* sql`CREATE INDEX IF NOT EXISTS items_project ON items(project_id)`;
       if (schemaVersion === 1) {
         yield* sql`ALTER TABLE items ADD COLUMN body TEXT NOT NULL DEFAULT ''`;
         yield* sql`ALTER TABLE items ADD COLUMN comments TEXT NOT NULL DEFAULT '[]'`;
       }
-      if (schemaVersion < 3) yield* sql`ALTER TABLE items ADD COLUMN last_refreshed_at TEXT`;
-      yield* sql`PRAGMA user_version = 3`;
+      if (schemaVersion > 0 && schemaVersion < 3)
+        yield* sql`ALTER TABLE items ADD COLUMN last_refreshed_at TEXT`;
+      yield* sql`CREATE TABLE IF NOT EXISTS item_threads (
+        id INTEGER PRIMARY KEY, item_id TEXT NOT NULL, thread_id TEXT NOT NULL,
+        UNIQUE (item_id, thread_id)
+      )`;
+      yield* sql`CREATE INDEX IF NOT EXISTS item_threads_item ON item_threads(item_id, id)`;
+      yield* sql`PRAGMA user_version = 4`;
     }),
   );
   const requireProject = Effect.fn(function* (projectId: ProjectId) {
     if (!(yield* projects.exists(projectId)))
       return yield* new ItemRequestError({ message: "Project not found." });
   });
+  const listThreads = (itemId: string) =>
+    Effect.gen(function* () {
+      const rows = yield* sql<{
+        threadId: string;
+      }>`SELECT thread_id AS "threadId" FROM item_threads WHERE item_id = ${itemId} ORDER BY id`;
+      return rows.map(({ threadId }) => ({ threadId }));
+    });
   const list = Effect.fn("ItemService.list")(
     function* (projectId: ProjectId) {
       yield* requireProject(projectId);
@@ -121,6 +148,7 @@ const make = Effect.gen(function* () {
         id: rows[0]?.id,
         projectId,
         ...issue,
+        threads: [],
         lastRefreshedAt,
         refreshError: null,
       });
@@ -139,7 +167,12 @@ const make = Effect.gen(function* () {
       const row = rows[0];
       if (!row) return yield* new ItemRequestError({ message: "Item not found." });
       const comments = yield* decodeComments(String(row.comments));
-      const cached = yield* decodeItem({ ...row, comments, refreshError: null });
+      const cached = yield* decodeItem({
+        ...row,
+        comments,
+        threads: yield* listThreads(itemId),
+        refreshError: null,
+      });
       return yield* github.fetch(cached.url).pipe(
         Effect.matchEffect({
           onFailure: (error) => decodeItem({ ...cached, refreshError: error.message }),
@@ -152,6 +185,7 @@ const make = Effect.gen(function* () {
               return yield* decodeItem({
                 ...cached,
                 ...issue,
+                threads: cached.threads,
                 lastRefreshedAt,
                 refreshError: null,
               });
@@ -165,7 +199,25 @@ const make = Effect.gen(function* () {
         : new ItemUnavailableError({ message: "Could not read the Item." }),
     ),
   );
-  return ItemService.of({ list, get: refresh, refresh, create });
+  const startThread = Effect.fn("ItemService.startThread")(
+    function* (projectId: ProjectId, itemId: string) {
+      yield* requireProject(projectId);
+      const rows = yield* sql<{
+        title: string;
+      }>`SELECT title FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
+      const item = rows[0];
+      if (!item) return yield* new ItemRequestError({ message: "Item not found." });
+      const threadId = yield* threadLauncher.launch({ projectId, title: item.title });
+      yield* sql`INSERT INTO item_threads (item_id, thread_id) VALUES (${itemId}, ${threadId}) ON CONFLICT(item_id, thread_id) DO NOTHING`;
+      return threadId;
+    },
+    Effect.mapError((cause) =>
+      isRequestError(cause) || isUnavailableError(cause)
+        ? cause
+        : new ItemUnavailableError({ message: "Could not start a Thread for this Item." }),
+    ),
+  );
+  return ItemService.of({ list, get: refresh, refresh, create, startThread });
 });
 
 /** A private SQL layer keeps p4code queries away from T3's database service. */

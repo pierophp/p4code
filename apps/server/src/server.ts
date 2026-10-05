@@ -642,7 +642,7 @@ export const runServer = Effect.scoped(
   }),
 );
 const makeRoutesLayer = Layer.mergeAll(
-  P4code.routesLayer,
+  P4code.routesLayer.pipe(Layer.provide(RuntimeDependenciesLive)),
   // p4code:end server integration
   Layer.mergeAll(
     HttpApiBuilder.layer(EnvironmentHttpApi).pipe(

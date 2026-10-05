@@ -2,8 +2,18 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import {
+  CommandId,
+  DEFAULT_MODEL,
+  DEFAULT_PROVIDER_INTERACTION_MODE,
+  ProviderInstanceId,
+} from "@t3tools/contracts";
+import * as Crypto from "effect/Crypto";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { ItemUnavailableError } from "@p4code/contracts/items";
 import * as ServerConfig from "../../../apps/server/src/config.ts";
+import * as ServerSettings from "../../../apps/server/src/serverSettings.ts";
+import * as ThreadLaunch from "../../../apps/server/src/orchestration-v2/ThreadLaunchService.ts";
 import * as ProjectStore from "../../../apps/server/src/orchestration-v2/ProjectStore.ts";
 import { environmentAuthenticatedAuthLayer } from "../../../apps/server/src/auth/http.ts";
 import * as ItemService from "./ItemService.ts";
@@ -26,6 +36,40 @@ const projects = Layer.effect(
     } satisfies ItemService.Projects["Service"];
   }),
 );
+const itemThreadLauncher = Layer.effect(
+  ItemService.ItemThreadLauncher,
+  Effect.gen(function* () {
+    const crypto = yield* Crypto.Crypto;
+    const settingsService = yield* ServerSettings.ServerSettingsService;
+    const threadLaunch = yield* ThreadLaunch.ThreadLaunchService;
+    return {
+      launch: (input) =>
+        Effect.gen(function* () {
+          const settings = resolveProjectSettings(
+            yield* settingsService.getSettings,
+            input.projectId,
+          ).settings;
+          const result = yield* threadLaunch.launch({
+            commandId: CommandId.make(yield* crypto.randomUUIDv4),
+            projectId: input.projectId,
+            title: input.title,
+            modelSelection: settings.defaultModelSelection ?? {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: DEFAULT_MODEL,
+            },
+            runtimeMode: settings.defaultRuntimeMode,
+            interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+            workspaceStrategy: { type: "root" },
+            createdBy: "user",
+            creationSource: "web",
+          });
+          return result.threadId;
+        }).pipe(
+          Effect.mapError(() => new ItemUnavailableError({ message: "Could not start a Thread." })),
+        ),
+    } satisfies ItemService.ItemThreadLauncher["Service"];
+  }),
+);
 export const routesLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
@@ -34,6 +78,7 @@ export const routesLayer = Layer.unwrap(
       Layer.provide(
         ItemService.layer(path.join(config.stateDir, "p4code.sqlite")).pipe(
           Layer.provide(GitHubIssue.layer),
+          Layer.provide(itemThreadLauncher),
           Layer.provide(projects),
         ),
       ),

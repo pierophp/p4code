@@ -9,11 +9,15 @@ export function ItemsView({
   create,
   get,
   refresh,
+  startThread,
+  openThread,
 }: {
   list: () => Promise<ReadonlyArray<ItemSummary>>;
   create: (url: string) => Promise<void>;
   get: (item: ItemSummary) => Promise<Item>;
   refresh: (item: ItemSummary) => Promise<Item>;
+  startThread: (item: ItemSummary) => Promise<string>;
+  openThread: (threadId: string) => void;
 }) {
   const [items, setItems] = useState<ReadonlyArray<ItemSummary>>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -24,6 +28,7 @@ export function ItemsView({
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [startingThread, setStartingThread] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     void list()
@@ -165,6 +170,49 @@ export function ItemsView({
                           {refreshing === selectedDetail.id ? "Refreshing…" : "Refresh"}
                         </button>
                       </div>
+                      <section className="flex flex-col gap-2" aria-label="Threads">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h2 className="font-semibold">
+                            Threads ({selectedDetail.threads.length})
+                          </h2>
+                          <button
+                            className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+                            type="button"
+                            disabled={startingThread === selectedDetail.id}
+                            onClick={async () => {
+                              setStartingThread(selectedDetail.id);
+                              setError(null);
+                              try {
+                                const threadId = await startThread(item);
+                                openThread(threadId);
+                              } catch (error) {
+                                setError(error instanceof Error ? error.message : String(error));
+                              } finally {
+                                setStartingThread(null);
+                              }
+                            }}
+                          >
+                            {startingThread === selectedDetail.id ? "Starting…" : "Start Thread"}
+                          </button>
+                        </div>
+                        {selectedDetail.threads.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No Threads yet.</p>
+                        ) : (
+                          <ul className="flex flex-col gap-1">
+                            {selectedDetail.threads.map(({ threadId }) => (
+                              <li key={threadId}>
+                                <button
+                                  className="break-all text-left text-sm underline"
+                                  type="button"
+                                  onClick={() => openThread(threadId)}
+                                >
+                                  Open Thread {threadId}
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </section>
                       {selectedDetail.refreshError && (
                         <p role="alert">Refresh failed: {selectedDetail.refreshError}</p>
                       )}

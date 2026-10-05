@@ -1,4 +1,4 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { EnvironmentId, ProjectId } from "@t3tools/contracts";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
@@ -6,6 +6,7 @@ import { ItemsView } from "@p4code/web/ItemsView";
 import {
   createItemDetailAtom,
   createItemRefreshAtom,
+  createItemThreadAtom,
   createItemsAtoms,
   type ItemSummary,
 } from "@p4code/web/items";
@@ -15,6 +16,7 @@ import { useAtomCommand } from "../state/use-atom-command";
 const items = createItemsAtoms(connectionAtomRuntime);
 const itemDetail = createItemDetailAtom(connectionAtomRuntime);
 const itemRefresh = createItemRefreshAtom(connectionAtomRuntime);
+const itemThread = createItemThreadAtom(connectionAtomRuntime);
 export const Route = createFileRoute("/items/$environmentId/$projectId")({
   beforeLoad: ({ context }) => {
     if (
@@ -31,6 +33,8 @@ function ItemsPage() {
   const run = useAtomCommand(items, { reportFailure: false });
   const runDetail = useAtomCommand(itemDetail, { reportFailure: false });
   const runRefresh = useAtomCommand(itemRefresh, { reportFailure: false });
+  const runStartThread = useAtomCommand(itemThread, { reportFailure: false });
+  const navigate = useNavigate();
   const list = useCallback(async () => {
     const result = await run({
       environmentId: EnvironmentId.make(environmentId),
@@ -71,6 +75,26 @@ function ItemsPage() {
     },
     [runRefresh, environmentId, projectId],
   );
+  const startThread = useCallback(
+    async (item: ItemSummary) => {
+      const result = await runStartThread({
+        environmentId: EnvironmentId.make(environmentId),
+        input: { projectId: ProjectId.make(projectId), itemId: item.id },
+      });
+      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+      return result.value;
+    },
+    [runStartThread, environmentId, projectId],
+  );
+  const openThread = useCallback(
+    (threadId: string) => {
+      void navigate({
+        to: "/$environmentId/$threadId",
+        params: { environmentId, threadId },
+      });
+    },
+    [navigate, environmentId],
+  );
   return (
     <ItemsView
       key={`${environmentId}:${projectId}`}
@@ -78,6 +102,8 @@ function ItemsPage() {
       create={create}
       get={get}
       refresh={refresh}
+      startThread={startThread}
+      openThread={openThread}
     />
   );
 }

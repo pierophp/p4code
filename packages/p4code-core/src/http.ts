@@ -34,6 +34,14 @@ const handlers = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "startThread",
+        Effect.fn(function* ({ params }) {
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          const threadId = yield* items.startThread(params.projectId, params.itemId);
+          return { threadId };
+        }),
+      )
+      .handle(
         "create",
         Effect.fn(function* ({ params, payload }) {
           yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
