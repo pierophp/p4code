@@ -1040,4 +1040,15 @@ const makeServerLayer = Layer.unwrap(
 );
 
 // The CLI supplies configuration.
-export const runServer = Layer.launch(makeServerLayer);
+// p4code:begin home lock
+export const runServer = Effect.scoped(
+  Effect.gen(function* () {
+    const config = yield* ServerConfig.ServerConfig;
+    const HomeLock = yield* Effect.promise(
+      () => import("../../../packages/p4code-core/src/homeLock.ts"),
+    );
+    yield* HomeLock.acquire(config.baseDir).pipe(Effect.provide(NodeServices.layer));
+    return yield* Layer.launch(makeServerLayer);
+  }),
+);
+// p4code:end home lock
