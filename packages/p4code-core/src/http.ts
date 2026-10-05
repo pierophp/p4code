@@ -27,6 +27,13 @@ const handlers = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "refresh",
+        Effect.fn(function* ({ params }) {
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          return yield* items.refresh(params.projectId, params.itemId);
+        }),
+      )
+      .handle(
         "create",
         Effect.fn(function* ({ params, payload }) {
           yield* requireEnvironmentScope(AuthOrchestrationOperateScope);

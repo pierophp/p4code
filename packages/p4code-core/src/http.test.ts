@@ -95,6 +95,10 @@ const request = (project: string, url?: string) =>
   );
 const detailRequest = (project: string, id: string) =>
   new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}`);
+const refreshRequest = (project: string, id: string) =>
+  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/refresh`, {
+    method: "POST",
+  });
 it("creates an issue snapshot and lists only its Project, including after reopening SQLite", async () => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "p4code-items-"));
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));
@@ -103,7 +107,13 @@ it("creates an issue snapshot and lists only its Project, including after reopen
   const created = await app.handler(request("project-a", issue.url));
   expect(created.status).toBe(200);
   const item = await created.json();
-  expect(item).toEqual({ id: expect.any(String), projectId: "project-a", ...issue });
+  expect(item).toEqual({
+    id: expect.any(String),
+    projectId: "project-a",
+    ...issue,
+    lastRefreshedAt: expect.any(String),
+    refreshError: null,
+  });
   expect(await (await app.handler(request("project-b"))).json()).toEqual([]);
   expect(await (await app.handler(request("project-a"))).json()).toEqual([
     {
@@ -115,7 +125,11 @@ it("creates an issue snapshot and lists only its Project, including after reopen
       author: issue.author,
     },
   ]);
-  expect(await (await app.handler(detailRequest("project-a", item.id))).json()).toEqual(item);
+  const detail = await (await app.handler(detailRequest("project-a", item.id))).json();
+  expect(detail).toEqual({ ...item, lastRefreshedAt: expect.any(String) });
+  expect(Date.parse(detail.lastRefreshedAt)).toBeGreaterThanOrEqual(
+    Date.parse(item.lastRefreshedAt),
+  );
   await app.dispose();
   cleanup.pop();
   const reopened = await fixture(filename);
@@ -129,7 +143,70 @@ it("creates an issue snapshot and lists only its Project, including after reopen
       author: issue.author,
     },
   ]);
-  expect(await (await reopened.handler(detailRequest("project-a", item.id))).json()).toEqual(item);
+  const reopenedDetail = await (await reopened.handler(detailRequest("project-a", item.id))).json();
+  expect(reopenedDetail.body).toBe(issue.body);
+  expect(reopenedDetail.comments).toEqual(issue.comments);
+  expect(Date.parse(reopenedDetail.lastRefreshedAt)).toBeGreaterThanOrEqual(
+    Date.parse(item.lastRefreshedAt),
+  );
+});
+
+it("refreshes on detail and explicit requests while preserving the cached snapshot on failure", async () => {
+  const calls: string[] = [];
+  const app = await fixture(await temporaryDatabase(), {
+    adapter: {
+      fetch: () => {
+        calls.push("fetch");
+        return calls.length === 1
+          ? Effect.succeed(issue)
+          : Effect.fail(
+              new ItemUnavailableError({
+                message: "GitHub rate limit exceeded. Try again after the quota resets.",
+              }),
+            );
+      },
+    },
+  });
+  const created = await app.handler(request("project-a", issue.url));
+  const item = await created.json();
+  const opened = await app.handler(detailRequest("project-a", item.id));
+  expect(opened.status).toBe(200);
+  expect(await opened.json()).toEqual({
+    ...item,
+    refreshError: "GitHub rate limit exceeded. Try again after the quota resets.",
+  });
+  const refreshed = await app.handler(refreshRequest("project-a", item.id));
+  expect(refreshed.status).toBe(200);
+  expect(await refreshed.json()).toEqual({
+    ...item,
+    refreshError: "GitHub rate limit exceeded. Try again after the quota resets.",
+  });
+  expect(calls).toHaveLength(3);
+  const persisted = await app.handler(detailRequest("project-a", item.id));
+  expect((await persisted.json()).body).toBe(issue.body);
+});
+
+it("stores the latest snapshot and timestamp after an explicit refresh", async () => {
+  const updated = { ...issue, title: "Updated issue title", state: "CLOSED" as const };
+  let calls = 0;
+  const app = await fixture(await temporaryDatabase(), {
+    adapter: {
+      fetch: () => Effect.succeed(++calls === 1 ? issue : updated),
+    },
+  });
+  const created = await app.handler(request("project-a", issue.url));
+  const original = await created.json();
+  const response = await app.handler(refreshRequest("project-a", original.id));
+  expect(response.status).toBe(200);
+  const refreshed = await response.json();
+  expect(refreshed.title).toBe(updated.title);
+  expect(refreshed.state).toBe(updated.state);
+  expect(refreshed.refreshError).toBeNull();
+  expect(Date.parse(refreshed.lastRefreshedAt)).toBeGreaterThanOrEqual(
+    Date.parse(original.lastRefreshedAt),
+  );
+  const persisted = await app.handler(detailRequest("project-a", original.id));
+  expect((await persisted.json()).title).toBe(updated.title);
 });
 
 async function temporaryDatabase() {
@@ -153,6 +230,7 @@ it("requires operate scope to create and read scope to list", async () => {
   expect((await app.handler(request("project-a", issue.url))).status).toBe(403);
   expect((await app.handler(request("project-a"))).status).toBe(403);
   expect((await app.handler(detailRequest("project-a", "1"))).status).toBe(403);
+  expect((await app.handler(refreshRequest("project-a", "1"))).status).toBe(403);
 });
 it("rejects Projects that do not exist", async () => {
   const app = await fixture(await temporaryDatabase(), { exists: false });

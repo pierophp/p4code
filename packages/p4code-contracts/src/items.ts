@@ -41,6 +41,8 @@ export const Item = Schema.Struct({
   ...ItemSummary.fields,
   body: Schema.String,
   comments: IssueSnapshot.fields.comments,
+  lastRefreshedAt: Schema.NullOr(Schema.String),
+  refreshError: Schema.NullOr(Schema.String),
 });
 export type Item = typeof Item.Type;
 export class ItemRequestError extends Schema.TaggedError<ItemRequestError>()(
@@ -74,6 +76,14 @@ class Items extends HttpApiGroup.make("items")
   )
   .add(
     HttpApiEndpoint.get("get", "/api/p4code/projects/:projectId/items/:itemId", {
+      params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
+      headers,
+      success: Item,
+      error: errors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("refresh", "/api/p4code/projects/:projectId/items/:itemId/refresh", {
       params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
       headers,
       success: Item,

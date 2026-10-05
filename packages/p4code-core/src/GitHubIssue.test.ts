@@ -43,6 +43,19 @@ it.effect("explains inaccessible issues", () =>
   ),
 );
 
+it.effect("rejects malformed issue URLs before invoking the CLI", () =>
+  Effect.gen(function* () {
+    const adapter = yield* GitHubIssue.GitHubIssue;
+    const error = yield* adapter.fetch("https://github.com/owner/repo/pull/5").pipe(Effect.flip);
+    expect(error._tag).toBe("ItemRequestError");
+    expect(error.message).toContain("Paste a GitHub issue URL");
+  }).pipe(
+    Effect.provide(
+      GitHubIssue.layerWithRunner(() => Promise.reject(new Error("runner should not be called"))),
+    ),
+  ),
+);
+
 it.effect.each([
   ["API rate limit exceeded", "GitHub rate limit exceeded. Try again after the quota resets."],
   [

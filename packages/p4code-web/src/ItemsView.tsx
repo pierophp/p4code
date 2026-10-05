@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import * as DateTime from "effect/DateTime";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Item, ItemSummary } from "@p4code/contracts/items";
@@ -7,10 +8,12 @@ export function ItemsView({
   list,
   create,
   get,
+  refresh,
 }: {
   list: () => Promise<ReadonlyArray<ItemSummary>>;
   create: (url: string) => Promise<void>;
   get: (item: ItemSummary) => Promise<Item>;
+  refresh: (item: ItemSummary) => Promise<Item>;
 }) {
   const [items, setItems] = useState<ReadonlyArray<ItemSummary>>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -20,6 +23,7 @@ export function ItemsView({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [refreshing, setRefreshing] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
     void list()
@@ -44,7 +48,10 @@ export function ItemsView({
     let active = true;
     void get(item).then(
       (value) => {
-        if (active) setDetail({ itemId: item.id, value });
+        if (active) {
+          setDetail({ itemId: item.id, value });
+          setDetailError(null);
+        }
       },
       (error: unknown) => {
         if (active)
@@ -126,10 +133,41 @@ export function ItemsView({
                 <section className="mt-4 flex min-w-0 flex-col gap-5 border-t pt-4">
                   {detailLoading ? (
                     <p role="status">Loading issue details…</p>
-                  ) : selectedDetailError ? (
-                    <p role="alert">{selectedDetailError}</p>
                   ) : selectedDetail ? (
                     <>
+                      {selectedDetailError && <p role="alert">{selectedDetailError}</p>}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-sm text-muted-foreground">
+                          {selectedDetail.lastRefreshedAt
+                            ? `Last refreshed ${DateTime.formatIntl(DateTime.makeUnsafe(selectedDetail.lastRefreshedAt), new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }))} (${formatAge(selectedDetail.lastRefreshedAt)} ago)`
+                            : "Not refreshed yet"}
+                        </p>
+                        <button
+                          className="rounded border px-3 py-1 text-sm disabled:opacity-50"
+                          type="button"
+                          disabled={refreshing === selectedDetail.id}
+                          onClick={async () => {
+                            setRefreshing(selectedDetail.id);
+                            try {
+                              const value = await refresh(item);
+                              setDetail({ itemId: selectedDetail.id, value });
+                              setDetailError(null);
+                            } catch (error) {
+                              setDetailError({
+                                itemId: item.id,
+                                message: error instanceof Error ? error.message : String(error),
+                              });
+                            } finally {
+                              setRefreshing(null);
+                            }
+                          }}
+                        >
+                          {refreshing === selectedDetail.id ? "Refreshing…" : "Refresh"}
+                        </button>
+                      </div>
+                      {selectedDetail.refreshError && (
+                        <p role="alert">Refresh failed: {selectedDetail.refreshError}</p>
+                      )}
                       <article className="min-w-0 break-words">
                         <h2 className="mb-2 font-semibold">Issue description</h2>
                         {selectedDetail.body ? (
@@ -173,6 +211,8 @@ export function ItemsView({
                         )}
                       </section>
                     </>
+                  ) : selectedDetailError ? (
+                    <p role="alert">{selectedDetailError}</p>
                   ) : null}
                 </section>
               )}
@@ -182,4 +222,21 @@ export function ItemsView({
       )}
     </main>
   );
+}
+
+function formatAge(timestamp: string) {
+  const minutes = Math.max(
+    0,
+    Math.floor(
+      (DateTime.toEpochMillis(DateTime.nowUnsafe()) -
+        DateTime.toEpochMillis(DateTime.makeUnsafe(timestamp))) /
+        60_000,
+    ),
+  );
+  if (minutes < 1) return "less than a minute";
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? "minute" : "minutes"}`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  const days = Math.floor(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"}`;
 }

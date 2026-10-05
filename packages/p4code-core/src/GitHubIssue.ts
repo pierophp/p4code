@@ -4,12 +4,19 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { IssueSnapshot, ItemUnavailableError } from "@p4code/contracts/items";
+import {
+  IssueSnapshot,
+  IssueUrl,
+  ItemRequestError,
+  ItemUnavailableError,
+} from "@p4code/contracts/items";
 
 export class GitHubIssue extends Context.Service<
   GitHubIssue,
   {
-    readonly fetch: (url: string) => Effect.Effect<IssueSnapshot, ItemUnavailableError>;
+    readonly fetch: (
+      url: string,
+    ) => Effect.Effect<IssueSnapshot, ItemRequestError | ItemUnavailableError>;
   }
 >()("@p4code/core/GitHubIssue") {}
 const GitHubJson = Schema.Struct({
@@ -29,6 +36,7 @@ const GitHubJson = Schema.Struct({
 
 const hasStderr = Schema.is(Schema.Struct({ stderr: Schema.String }));
 const decodeIssue = Schema.decodeUnknownEffect(Schema.fromJsonString(GitHubJson));
+const decodeUrl = Schema.decodeUnknownEffect(IssueUrl);
 
 const runIssueCommand = (url: string, signal: AbortSignal) =>
   new Promise<string>((resolve, reject) => {
@@ -47,6 +55,14 @@ const runIssueCommand = (url: string, signal: AbortSignal) =>
 export const layerWithRunner = (run: (url: string, signal: AbortSignal) => Promise<string>) =>
   Layer.succeed(GitHubIssue, {
     fetch: Effect.fn("GitHubIssue.fetch")(function* (url) {
+      yield* decodeUrl(url).pipe(
+        Effect.mapError(
+          () =>
+            new ItemRequestError({
+              message: "Paste a GitHub issue URL such as https://github.com/owner/repo/issues/123.",
+            }),
+        ),
+      );
       const stdout = yield* Effect.tryPromise({
         try: (signal) => run(url, signal),
         catch: (cause) => {
