@@ -5,8 +5,10 @@ import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime"
 import { ItemsView } from "@p4code/web/ItemsView";
 import {
   createItemDetailAtom,
+  createItemLinkThreadAtom,
   createItemRefreshAtom,
   createItemThreadAtom,
+  createItemUnlinkThreadAtom,
   createItemsAtoms,
   type ItemSummary,
 } from "@p4code/web/items";
@@ -17,6 +19,8 @@ const items = createItemsAtoms(connectionAtomRuntime);
 const itemDetail = createItemDetailAtom(connectionAtomRuntime);
 const itemRefresh = createItemRefreshAtom(connectionAtomRuntime);
 const itemThread = createItemThreadAtom(connectionAtomRuntime);
+const itemLinkThread = createItemLinkThreadAtom(connectionAtomRuntime);
+const itemUnlinkThread = createItemUnlinkThreadAtom(connectionAtomRuntime);
 export const Route = createFileRoute("/items/$environmentId/$projectId")({
   beforeLoad: ({ context }) => {
     if (
@@ -34,6 +38,8 @@ function ItemsPage() {
   const runDetail = useAtomCommand(itemDetail, { reportFailure: false });
   const runRefresh = useAtomCommand(itemRefresh, { reportFailure: false });
   const runStartThread = useAtomCommand(itemThread, { reportFailure: false });
+  const runLinkThread = useAtomCommand(itemLinkThread, { reportFailure: false });
+  const runUnlinkThread = useAtomCommand(itemUnlinkThread, { reportFailure: false });
   const navigate = useNavigate();
   const list = useCallback(async () => {
     const result = await run({
@@ -95,6 +101,26 @@ function ItemsPage() {
     },
     [navigate, environmentId],
   );
+  const linkThread = useCallback(
+    async (item: ItemSummary, threadId: string) => {
+      const result = await runLinkThread({
+        environmentId: EnvironmentId.make(environmentId),
+        input: { projectId: ProjectId.make(projectId), itemId: item.id, threadId },
+      });
+      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+    },
+    [runLinkThread, environmentId, projectId],
+  );
+  const unlinkThread = useCallback(
+    async (item: ItemSummary, threadId: string) => {
+      const result = await runUnlinkThread({
+        environmentId: EnvironmentId.make(environmentId),
+        input: { projectId: ProjectId.make(projectId), itemId: item.id, threadId },
+      });
+      if (result._tag === "Failure") throw squashAtomCommandFailure(result);
+    },
+    [runUnlinkThread, environmentId, projectId],
+  );
   return (
     <ItemsView
       key={`${environmentId}:${projectId}`}
@@ -103,6 +129,8 @@ function ItemsPage() {
       get={get}
       refresh={refresh}
       startThread={startThread}
+      linkThread={linkThread}
+      unlinkThread={unlinkThread}
       openThread={openThread}
     />
   );

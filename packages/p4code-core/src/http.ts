@@ -42,6 +42,21 @@ const handlers = HttpApiBuilder.group(
         }),
       )
       .handle(
+        "linkThread",
+        Effect.fn(function* ({ params, payload }) {
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          yield* items.linkThread(params.projectId, params.itemId, payload.threadId);
+          return { threadId: payload.threadId };
+        }),
+      )
+      .handle(
+        "unlinkThread",
+        Effect.fn(function* ({ params }) {
+          yield* requireEnvironmentScope(AuthOrchestrationOperateScope);
+          yield* items.unlinkThread(params.projectId, params.itemId, params.threadId);
+        }),
+      )
+      .handle(
         "create",
         Effect.fn(function* ({ params, payload }) {
           yield* requireEnvironmentScope(AuthOrchestrationOperateScope);

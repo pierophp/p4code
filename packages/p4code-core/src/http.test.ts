@@ -120,6 +120,16 @@ const startThreadRequest = (project: string, id: string) =>
   new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/threads`, {
     method: "POST",
   });
+const linkThreadRequest = (project: string, id: string, threadId: string) =>
+  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/threads/link`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ threadId }),
+  });
+const unlinkThreadRequest = (project: string, id: string, threadId: string) =>
+  new Request(`http://t3.test/api/p4code/projects/${project}/items/${id}/threads/${threadId}`, {
+    method: "DELETE",
+  });
 it("creates an issue snapshot and lists only its Project, including after reopening SQLite", async () => {
   const dir = await NodeFSP.mkdtemp(NodePath.join(NodeOS.tmpdir(), "p4code-items-"));
   cleanup.push(() => NodeFSP.rm(dir, { recursive: true, force: true }));
@@ -298,6 +308,67 @@ it("keeps the cached Item and every Thread link when only some Threads are unava
   expect(afterReplacement.comments).toEqual(issue.comments);
   expect(await (await app.handler(request("project-a"))).json()).toHaveLength(1);
 });
+
+it("links only a live Thread in the same Project and unlinks its reference without deleting it", async () => {
+  const lookups: Array<{ projectId: string; threadId: string }> = [];
+  const filename = await temporaryDatabase();
+  const threadReader = {
+    isAvailable: ({ projectId, threadId }: { projectId: string; threadId: string }) => {
+      lookups.push({ projectId, threadId });
+      return Effect.succeed(projectId === "project-a" && threadId === "live-thread");
+    },
+  } satisfies ItemService.ItemThreadReader["Service"];
+  const app = await fixture(filename, { threadReader });
+  const created = await app.handler(request("project-a", issue.url));
+  const item = await created.json();
+
+  const rejected = await app.handler(
+    linkThreadRequest("project-a", item.id, "other-project-thread"),
+  );
+  expect(rejected.status).toBe(400);
+  expect(await rejected.json()).toEqual({
+    _tag: "ItemRequestError",
+    message: "Thread not found in this Project.",
+  });
+  expect((await (await app.handler(detailRequest("project-a", item.id))).json()).threads).toEqual(
+    [],
+  );
+
+  const linked = await app.handler(linkThreadRequest("project-a", item.id, "live-thread"));
+  expect(linked.status).toBe(200);
+  expect(await linked.json()).toEqual({ threadId: "live-thread" });
+  await app.handler(linkThreadRequest("project-a", item.id, "live-thread"));
+  expect((await (await app.handler(detailRequest("project-a", item.id))).json()).threads).toEqual([
+    { threadId: "live-thread", available: true },
+  ]);
+  const otherItem = await (await app.handler(request("project-a", issue.url))).json();
+  const alreadyLinked = await app.handler(
+    linkThreadRequest("project-a", otherItem.id, "live-thread"),
+  );
+  expect(alreadyLinked.status).toBe(400);
+  expect(await alreadyLinked.json()).toEqual({
+    _tag: "ItemRequestError",
+    message: "Thread is already linked to an Item.",
+  });
+  expect(lookups).toContainEqual({ projectId: "project-a", threadId: "other-project-thread" });
+  expect(lookups).toContainEqual({ projectId: "project-a", threadId: "live-thread" });
+
+  await app.dispose();
+  cleanup.pop();
+  const reopened = await fixture(filename, { threadReader });
+  expect(
+    (await (await reopened.handler(detailRequest("project-a", item.id))).json()).threads,
+  ).toEqual([{ threadId: "live-thread", available: true }]);
+
+  const unlinked = await reopened.handler(unlinkThreadRequest("project-a", item.id, "live-thread"));
+  expect(unlinked.status).toBe(200);
+  expect(
+    (await (await reopened.handler(detailRequest("project-a", item.id))).json()).threads,
+  ).toEqual([]);
+  expect(await (await reopened.handler(request("project-a"))).json()).toHaveLength(2);
+  expect(lookups.at(-1)).toEqual({ projectId: "project-a", threadId: "live-thread" });
+});
+
 it("rejects malformed issue URLs without creating an Item", async () => {
   const app = await fixture(await temporaryDatabase());
   for (const url of [

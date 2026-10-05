@@ -10,6 +10,8 @@ export function ItemsView({
   get,
   refresh,
   startThread,
+  linkThread,
+  unlinkThread,
   openThread,
 }: {
   list: () => Promise<ReadonlyArray<ItemSummary>>;
@@ -17,6 +19,8 @@ export function ItemsView({
   get: (item: ItemSummary) => Promise<Item>;
   refresh: (item: ItemSummary) => Promise<Item>;
   startThread: (item: ItemSummary) => Promise<string>;
+  linkThread: (item: ItemSummary, threadId: string) => Promise<void>;
+  unlinkThread: (item: ItemSummary, threadId: string) => Promise<void>;
   openThread: (threadId: string) => void;
 }) {
   const [items, setItems] = useState<ReadonlyArray<ItemSummary>>([]);
@@ -29,6 +33,9 @@ export function ItemsView({
   const [creating, setCreating] = useState(false);
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [startingThread, setStartingThread] = useState<string | null>(null);
+  const [linkingThread, setLinkingThread] = useState<string | null>(null);
+  const [unlinkingThread, setUnlinkingThread] = useState<string | null>(null);
+  const [threadId, setThreadId] = useState("");
   useEffect(() => {
     let active = true;
     void list()
@@ -200,27 +207,95 @@ export function ItemsView({
                                 : "Start Thread"}
                           </button>
                         </div>
+                        <form
+                          className="flex flex-wrap items-end gap-2"
+                          onSubmit={async (event) => {
+                            event.preventDefault();
+                            const candidate = threadId.trim();
+                            if (!candidate) return;
+                            setLinkingThread(selectedDetail.id);
+                            setDetailError(null);
+                            try {
+                              await linkThread(item, candidate);
+                              setDetail({ itemId: item.id, value: await get(item) });
+                              setThreadId("");
+                            } catch (error) {
+                              setDetailError({
+                                itemId: item.id,
+                                message: error instanceof Error ? error.message : String(error),
+                              });
+                            } finally {
+                              setLinkingThread(null);
+                            }
+                          }}
+                        >
+                          <label className="flex min-w-0 flex-1 flex-col gap-1 text-sm">
+                            Link existing Thread
+                            <input
+                              className="min-w-0 rounded border bg-background p-2"
+                              value={threadId}
+                              required
+                              placeholder="Thread ID"
+                              onChange={(event) => setThreadId(event.target.value)}
+                            />
+                          </label>
+                          <button
+                            className="rounded border px-3 py-2 text-sm disabled:opacity-50"
+                            type="submit"
+                            disabled={linkingThread === selectedDetail.id}
+                          >
+                            {linkingThread === selectedDetail.id ? "Linking…" : "Link Thread"}
+                          </button>
+                        </form>
                         {selectedDetail.threads.length === 0 ? (
                           <p className="text-sm text-muted-foreground">No Threads yet.</p>
                         ) : (
                           <ul className="flex flex-col gap-1">
-                            {selectedDetail.threads.map(({ threadId, available }) => (
-                              <li key={threadId}>
-                                {available ? (
+                            {selectedDetail.threads.map(
+                              ({ threadId: linkedThreadId, available }) => (
+                                <li
+                                  key={linkedThreadId}
+                                  className="flex flex-wrap items-center gap-2"
+                                >
+                                  {available ? (
+                                    <button
+                                      className="break-all text-left text-sm underline"
+                                      type="button"
+                                      onClick={() => openThread(linkedThreadId)}
+                                    >
+                                      Open Thread {linkedThreadId}
+                                    </button>
+                                  ) : (
+                                    <span className="break-all text-sm text-muted-foreground">
+                                      Thread unavailable {linkedThreadId}
+                                    </span>
+                                  )}
                                   <button
-                                    className="break-all text-left text-sm underline"
+                                    className="text-sm text-muted-foreground underline disabled:opacity-50"
                                     type="button"
-                                    onClick={() => openThread(threadId)}
+                                    disabled={unlinkingThread === linkedThreadId}
+                                    onClick={async () => {
+                                      setUnlinkingThread(linkedThreadId);
+                                      setDetailError(null);
+                                      try {
+                                        await unlinkThread(item, linkedThreadId);
+                                        setDetail({ itemId: item.id, value: await get(item) });
+                                      } catch (error) {
+                                        setDetailError({
+                                          itemId: item.id,
+                                          message:
+                                            error instanceof Error ? error.message : String(error),
+                                        });
+                                      } finally {
+                                        setUnlinkingThread(null);
+                                      }
+                                    }}
                                   >
-                                    Open Thread {threadId}
+                                    {unlinkingThread === linkedThreadId ? "Unlinking…" : "Unlink"}
                                   </button>
-                                ) : (
-                                  <span className="break-all text-sm text-muted-foreground">
-                                    Thread unavailable {threadId}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
+                                </li>
+                              ),
+                            )}
                           </ul>
                         )}
                       </section>

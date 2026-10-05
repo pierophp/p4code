@@ -155,3 +155,85 @@ export function createItemThreadAtom<R, E>(
   });
   return createEnvironmentCommand(runtime, { label: "p4code:item-start-thread", execute: request });
 }
+
+export function createItemLinkThreadAtom<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | HttpClient.HttpClient | R, E>,
+) {
+  const request = Effect.fn(function* (input: {
+    projectId: ProjectId;
+    itemId: string;
+    threadId: string;
+  }) {
+    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+    if (Option.isNone(prepared))
+      return yield* new ItemUnavailableError({
+        message: "Reconnect to this environment to use Items.",
+      });
+    const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
+    const remoteAuthorization = yield* Effect.serviceOption(
+      RemoteAuthorization.RemoteEnvironmentAuthorization,
+    );
+    return yield* executeItemsHttpRequest({
+      prepared: prepared.value,
+      signer,
+      remoteAuthorization,
+      method: "POST",
+      url: (baseUrl) =>
+        new URL(
+          `/api/p4code/projects/${encodeURIComponent(input.projectId)}/items/${encodeURIComponent(input.itemId)}/threads/link`,
+          baseUrl,
+        ).toString(),
+      timeoutMs: 35_000,
+      request: ({ client, headers }) =>
+        client.linkThread({
+          params: { projectId: input.projectId, itemId: input.itemId },
+          payload: { threadId: input.threadId },
+          headers,
+        }),
+    });
+  });
+  return createEnvironmentCommand(runtime, { label: "p4code:item-link-thread", execute: request });
+}
+
+export function createItemUnlinkThreadAtom<R, E>(
+  runtime: Atom.AtomRuntime<EnvironmentRegistry.EnvironmentRegistry | HttpClient.HttpClient | R, E>,
+) {
+  const request = Effect.fn(function* (input: {
+    projectId: ProjectId;
+    itemId: string;
+    threadId: string;
+  }) {
+    const supervisor = yield* EnvironmentSupervisor.EnvironmentSupervisor;
+    const prepared = yield* SubscriptionRef.get(supervisor.prepared);
+    if (Option.isNone(prepared))
+      return yield* new ItemUnavailableError({
+        message: "Reconnect to this environment to use Items.",
+      });
+    const signer = yield* Effect.serviceOption(ManagedRelay.ManagedRelayDpopSigner);
+    const remoteAuthorization = yield* Effect.serviceOption(
+      RemoteAuthorization.RemoteEnvironmentAuthorization,
+    );
+    return yield* executeItemsHttpRequest({
+      prepared: prepared.value,
+      signer,
+      remoteAuthorization,
+      method: "DELETE",
+      url: (baseUrl) =>
+        new URL(
+          `/api/p4code/projects/${encodeURIComponent(input.projectId)}/items/${encodeURIComponent(input.itemId)}/threads/${encodeURIComponent(input.threadId)}`,
+          baseUrl,
+        ).toString(),
+      timeoutMs: 35_000,
+      request: ({ client, headers }) =>
+        client.unlinkThread({
+          params: { projectId: input.projectId, itemId: input.itemId, threadId: input.threadId },
+          headers,
+        }),
+    });
+  });
+  return createEnvironmentCommand(runtime, {
+    label: "p4code:item-unlink-thread",
+    execute: request,
+  });
+}

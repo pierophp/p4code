@@ -61,6 +61,16 @@ export class ItemService extends Context.Service<
       projectId: ProjectId,
       itemId: string,
     ) => Effect.Effect<string, ItemRequestError | ItemUnavailableError>;
+    readonly linkThread: (
+      projectId: ProjectId,
+      itemId: string,
+      threadId: string,
+    ) => Effect.Effect<void, ItemRequestError | ItemUnavailableError>;
+    readonly unlinkThread: (
+      projectId: ProjectId,
+      itemId: string,
+      threadId: string,
+    ) => Effect.Effect<void, ItemRequestError | ItemUnavailableError>;
     readonly create: (
       projectId: ProjectId,
       url: string,
@@ -231,7 +241,49 @@ const make = Effect.gen(function* () {
         : new ItemUnavailableError({ message: "Could not start a Thread for this Item." }),
     ),
   );
-  return ItemService.of({ list, get: refresh, refresh, create, startThread });
+  const linkThread = Effect.fn("ItemService.linkThread")(
+    function* (projectId: ProjectId, itemId: string, threadId: string) {
+      yield* requireProject(projectId);
+      const rows =
+        yield* sql`SELECT id FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
+      if (!rows[0]) return yield* new ItemRequestError({ message: "Item not found." });
+      if (!(yield* threadReader.isAvailable({ projectId, threadId })))
+        return yield* new ItemRequestError({ message: "Thread not found in this Project." });
+      const existing =
+        yield* sql`SELECT item_id FROM item_threads WHERE thread_id = ${threadId} AND item_id <> ${itemId} LIMIT 1`;
+      if (existing[0])
+        return yield* new ItemRequestError({ message: "Thread is already linked to an Item." });
+      yield* sql`INSERT INTO item_threads (item_id, thread_id) VALUES (${itemId}, ${threadId}) ON CONFLICT(item_id, thread_id) DO NOTHING`;
+    },
+    Effect.mapError((cause) =>
+      isRequestError(cause) || isUnavailableError(cause)
+        ? cause
+        : new ItemUnavailableError({ message: "Could not link the Thread to this Item." }),
+    ),
+  );
+  const unlinkThread = Effect.fn("ItemService.unlinkThread")(
+    function* (projectId: ProjectId, itemId: string, threadId: string) {
+      yield* requireProject(projectId);
+      const rows =
+        yield* sql`SELECT id FROM items WHERE project_id = ${projectId} AND id = ${itemId}`;
+      if (!rows[0]) return yield* new ItemRequestError({ message: "Item not found." });
+      yield* sql`DELETE FROM item_threads WHERE item_id = ${itemId} AND thread_id = ${threadId}`;
+    },
+    Effect.mapError((cause) =>
+      isRequestError(cause) || isUnavailableError(cause)
+        ? cause
+        : new ItemUnavailableError({ message: "Could not unlink the Thread from this Item." }),
+    ),
+  );
+  return ItemService.of({
+    list,
+    get: refresh,
+    refresh,
+    create,
+    startThread,
+    linkThread,
+    unlinkThread,
+  });
 });
 
 /** A private SQL layer keeps p4code queries away from T3's database service. */

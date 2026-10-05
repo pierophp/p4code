@@ -105,6 +105,31 @@ class Items extends HttpApiGroup.make("items")
     }).middleware(EnvironmentAuthenticatedAuth),
   )
   .add(
+    HttpApiEndpoint.post(
+      "linkThread",
+      "/api/p4code/projects/:projectId/items/:itemId/threads/link",
+      {
+        params: Schema.Struct({ ...params.fields, itemId: Schema.String }),
+        headers,
+        payload: Schema.Struct({ threadId: Schema.String }),
+        success: Schema.Struct({ threadId: Schema.String }),
+        error: errors,
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.delete(
+      "unlinkThread",
+      "/api/p4code/projects/:projectId/items/:itemId/threads/:threadId",
+      {
+        params: Schema.Struct({ ...params.fields, itemId: Schema.String, threadId: Schema.String }),
+        headers,
+        success: Schema.Void,
+        error: errors,
+      },
+    ).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
     HttpApiEndpoint.post("create", "/api/p4code/projects/:projectId/items", {
       params,
       headers,
