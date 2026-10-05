@@ -85,20 +85,20 @@ const itemThreadReader = Layer.effect(
     } satisfies ItemService.ItemThreadReader["Service"];
   }),
 );
-export const routesLayer = Layer.unwrap(
+export const itemServiceLayer = Layer.unwrap(
   Effect.gen(function* () {
     const config = yield* ServerConfig.ServerConfig;
     const path = yield* Path.Path;
-    return routes.pipe(
-      Layer.provide(
-        ItemService.layer(path.join(config.stateDir, "p4code.sqlite")).pipe(
-          Layer.provide(GitHubIssue.layer),
-          Layer.provide(itemThreadLauncher),
-          Layer.provide(itemThreadReader),
-          Layer.provide(projects),
-        ),
-      ),
-      Layer.provide(environmentAuthenticatedAuthLayer),
+    return ItemService.layer(path.join(config.stateDir, "p4code.sqlite")).pipe(
+      Layer.provide(GitHubIssue.layer),
+      Layer.provide(itemThreadLauncher),
+      Layer.provide(itemThreadReader),
+      Layer.provide(projects),
     );
   }),
+);
+
+export const routesLayer = routes.pipe(
+  Layer.provide(itemServiceLayer),
+  Layer.provide(environmentAuthenticatedAuthLayer),
 );
