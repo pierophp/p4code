@@ -64,8 +64,10 @@ The desktop fork installs alongside T3 Code with a distinct product name and
 bundle identifier supplied by [desktop-identity.json](desktop-identity.json) at
 artifact staging time, rather than changes to the upstream desktop package
 manifest. Signed macOS builds need a provisioning profile for the fork's bundle
-identifier. Both use the same T3 home and therefore the
-same Projects, Threads, and settings. Only one server may hold that home at a
+identifier. Both use the same T3 home and therefore the same Projects, Threads,
+and settings. Each desktop app keeps its encrypted connection catalog under its
+own filename in that home, because macOS Keychain access follows the app identity.
+Remote environments must be paired separately. Only one server may hold that home at a
 time: the startup lock refuses a second instance and names the locked directory.
 The lock is a safety prerequisite for sharing the home, not an optional feature.
 

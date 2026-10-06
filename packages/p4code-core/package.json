@@ -1,10 +1,12 @@
 {
   "name": "@p4code/core",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "exports": {
     "./homeLock": "./src/homeLock.ts",
-    "./integration": "./src/integration.ts"
+    "./integration": "./src/integration.ts",
+    "./desktopConnectionCatalog": "./src/desktopConnectionCatalog.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

@@ -378,6 +378,18 @@ const migrateSavedEnvironmentRecords = Effect.fn(
 
 /** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.gen(function* () {
+  // p4code:begin desktop-connection-catalog
+  const environmentForFork = yield* DesktopEnvironment.DesktopEnvironment;
+  const { makeP4CodeCatalogStore } = yield* Effect.promise(
+    () => import("@p4code/core/desktopConnectionCatalog"),
+  );
+  const forkStore = yield* makeP4CodeCatalogStore({
+    appRoot: environmentForFork.appRoot,
+    stateDir: environmentForFork.stateDir,
+  });
+  if (Option.isSome(forkStore)) return forkStore.value;
+  // p4code:end desktop-connection-catalog
+
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
