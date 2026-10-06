@@ -3733,6 +3733,18 @@ const buildDesktopArtifact = Effect.fn("buildDesktopArtifact")(function* (
     stagePackageJson,
     applyDesktopIdentity(stagePackageJson, options.platform, appVersion),
   );
+  if (options.platform === "mac" && resolveDesktopUpdateChannel(appVersion) !== "nightly") {
+    const p4IconPath = path.join(repoRoot, desktopIdentity.macIconPath);
+    yield* stageMacIcons(stageResourcesDir, p4IconPath, options.verbose);
+    yield* fs.copyFile(
+      path.join(stageResourcesDir, "icon.png"),
+      path.join(stageProdResourcesDir, "icon.png"),
+    );
+    yield* fs.copyFile(
+      path.join(stageResourcesDir, "icon.icns"),
+      path.join(stageProdResourcesDir, "icon.icns"),
+    );
+  }
   if (macPasskeySigning && macEntitlementsPath) {
     yield* fs.writeFileString(
       macEntitlementsPath,

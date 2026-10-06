@@ -1,5 +1,6 @@
 {
   "name": "p4code",
-  "productName": "p4code",
-  "appId": "com.pierophp.p4code"
+  "productName": "P4 Code",
+  "appId": "com.pierophp.p4code",
+  "macIconPath": "p4code/logo.png"
 }
